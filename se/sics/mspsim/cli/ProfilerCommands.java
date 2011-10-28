@@ -228,7 +228,7 @@ public class ProfilerCommands implements CommandBundle {
             context.err.println("No profiler found.");
             return 1;
           }
-          profiler.setLogger(context.out);
+          profiler.setLogger(context.err);
           return 0;
         }
         public void stopCommand(CommandContext context) {

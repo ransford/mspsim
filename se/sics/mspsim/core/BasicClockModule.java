@@ -50,7 +50,7 @@ public class BasicClockModule extends IOUnit {
 
   public static final int ACLK_FRQ = 32768;
   // DCO_FRQ what default frq is the DCO running at???
-  public static final int DCO_FRQ = 2500000;
+  public static final int DCO_FRQ = 1000000;
   // What frequency steps to take for the DCO?
   // We have 8 bits + 3 => 11 bits => 2048 combinations...
   // => What is lowest frq??? (zero)
@@ -147,6 +147,7 @@ public class BasicClockModule extends IOUnit {
 
     // resistor selects three bits gives the highest impact on the DCO_FACTOR
     // then dcoFrq and last dcoModulator
+    /* // XXX why is this commented out?
     int newcalcDCOFrq = ((dcoFrequency << 5) + dcoModulator +
 			 (resistorSel << 8)) * DCO_FACTOR + MIN_DCO_FRQ;
     if (newcalcDCOFrq != calcDCOFrq) {
@@ -155,6 +156,7 @@ public class BasicClockModule extends IOUnit {
       core.setDCOFrq(calcDCOFrq, calcDCOFrq / divSMclk);
       updateTimers(cycles);
     }
+    */
   }
 
   private void updateTimers(long cycles) {

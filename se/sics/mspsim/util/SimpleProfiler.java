@@ -83,6 +83,8 @@ public class SimpleProfiler implements Profiler, EventListener {
   private boolean newIRQ;
 
   private StackMonitor stackMonitor;
+  private long cyclesAtStartOfCheckpoint;
+  private long cyclesInCheckpoint = 0;
   
   public SimpleProfiler() {
     profileData = new HashMap<MapEntry, CallEntry>();
@@ -130,6 +132,12 @@ public class SimpleProfiler implements Profiler, EventListener {
                        ": " + entry.getInfo());
         if (ignoreFunctions.get(entry.getName()) != null) {
           hide = 1;
+        }
+
+        // XXX hard-coded hackery
+        if ("__mementos_checkpoint".equals(entry.getName())) {
+            cpu.inCheckpoint = true;
+            cyclesAtStartOfCheckpoint = cpu.cycles;
         }
       }
     }
@@ -225,6 +233,11 @@ public class SimpleProfiler implements Profiler, EventListener {
           if (servicedInterrupt >= 0) logger.printf("[%2d] ",servicedInterrupt);
           printSpace(logger, (cSP - interruptLevel) * 2);
           logger.println("return from " + ce.function.getInfo() + " elapsed: " + elapsed + " maxStackUsage: " + maxUsage);
+
+          // XXX hard-coded hackery
+          if ("__mementos_checkpoint".equals(ce.function.getName())) {
+              cpu.inCheckpoint = false;
+          }
         }
       }
 
@@ -247,7 +260,8 @@ public class SimpleProfiler implements Profiler, EventListener {
 
     PrintStream logger = this.logger;
     if (logger != null && !hideIRQ) {
-      logger.println("----- Interrupt vector " + vector + " start execution -----");
+      logger.println("----- Interrupt vector " + vector + " start execution " +
+              "(@cycle " + cpu.cycles +") -----");
     }
   }
   
@@ -271,6 +285,10 @@ public class SimpleProfiler implements Profiler, EventListener {
 
   public void resetProfile() {
     clearProfile();
+    resetCallStackPointer();
+  }
+  
+  public void resetCallStackPointer() {
     cSP = 0;
     servicedInterrupt = -1;
   }
@@ -282,6 +300,7 @@ public class SimpleProfiler implements Profiler, EventListener {
       for (int i = 0, n = entries.length; i < n; i++) {
         entries[i].cycles = 0;
         entries[i].calls = 0;
+        entries[i].exclusiveCycles = 0;
       }
       for (int i = 0, n = callStack.length; i < n; i++) {
         CallEntry e = callStack[i];
@@ -347,6 +366,38 @@ public class SimpleProfiler implements Profiler, EventListener {
         out.println();
       }
     }
+  }
+
+  public long getMementosCycles () {
+	  CallEntry[] entries = profileData.values().toArray(
+			  new CallEntry[profileData.size()]);
+	  long total = 0;
+	  String fname;
+	  boolean foundOldMain = false;
+
+	  /* tally up the exclusive cycles for all the __mementos_* functions.
+	   * also notice whether there's an "_old_main" function whose presence
+	   * indicates that main() is a wrapper whose cycles should be counted too
+	   */
+	  for (int i = 0, n = entries.length; i < n; ++i) {
+		  int c = entries[i].calls;
+		  if (c == 0)
+			  continue;
+		  fname = entries[i].function.getName();
+		  if (fname.equals("_old_main"))
+			  foundOldMain = true;
+		  else if (fname.startsWith("__mementos"))
+			  total += entries[i].exclusiveCycles;
+	  }
+	  
+	  // count main()'s exclusive cycles too if there's an old_main()
+	  if (foundOldMain) {
+		  for (int i = 0, n = entries.length; i < n; ++i) {
+			  if (entries[i].function.getName().equals("main"))
+				  total += entries[i].exclusiveCycles;
+		  }
+	  }
+	  return total;
   }
 
   private void printCallers(CallEntry callEntry, PrintStream out) {

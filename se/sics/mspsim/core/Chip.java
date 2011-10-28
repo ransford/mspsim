@@ -42,6 +42,7 @@ package se.sics.mspsim.core;
 import java.io.PrintStream;
 
 import se.sics.mspsim.util.ArrayUtils;
+import edu.umass.energy.Capacitor;
 
 /**
  * @author Joakim Eriksson, SICS
@@ -68,6 +69,9 @@ public abstract class Chip implements Loggable, EventSource {
   protected EmulationLogger logger;
   private PrintStream log;
   protected boolean DEBUG = false;
+  protected Capacitor capacitor = null;
+  public double deathThreshold;
+  public double resurrectionThreshold;
 
   public Chip(String id, MSP430Core cpu) {
     this(id, id, cpu);
@@ -123,6 +127,9 @@ public abstract class Chip implements Loggable, EventSource {
           listeners[i].modeChanged(this, mode);
         }
       }
+      if (null != capacitor) {
+        capacitor.setPowerMode(this.mode);
+      }
     }
   }
 
@@ -164,6 +171,14 @@ public abstract class Chip implements Loggable, EventSource {
     } catch (Exception e) {
     }
     return -1;
+  }
+
+  public void setCapacitor (Capacitor cap) {
+      this.capacitor = cap;
+  }
+
+  public Capacitor getCapacitor () {
+      return this.capacitor;
   }
 
   /* Called by subclasses to inform about changes of state */

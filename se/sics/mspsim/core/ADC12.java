@@ -48,6 +48,7 @@
 package se.sics.mspsim.core;
 
 import java.util.Arrays;
+import edu.umass.energy.Capacitor;
 
 public class ADC12 extends IOUnit {
 
@@ -136,6 +137,7 @@ public class ADC12 extends IOUnit {
     public void execute(long t) {
 //      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + core.cycles);
       convert();
+      core.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
     }
   };
 
@@ -298,6 +300,10 @@ public class ADC12 extends IOUnit {
       int delay = adcDiv * ((adc12Pos < 8 ? shTime0 : shTime1) + 13);
       core.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
     }
+    int delay = adcDiv * (shTime0 + 13) + 647/*XXX*/;
+    System.err.println("cycles="+core.cycles);
+
+    core.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
   }
   
   public void interruptServiced(int vector) {

@@ -44,8 +44,12 @@ import java.io.PrintStream;
 
 import se.sics.mspsim.util.ArrayUtils;
 import se.sics.mspsim.util.ComponentRegistry;
+import se.sics.mspsim.util.ConfigManager;
 import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.SimpleProfiler;
+
+import edu.umass.energy.Capacitor;
+import edu.umass.energy.EnergyFairy;
 
 public class MSP430 extends MSP430Core {
 
@@ -80,6 +84,29 @@ public class MSP430 extends MSP430Core {
   public MSP430(int type, ComponentRegistry registry, MSP430Config config) {
     super(type, registry, config);
     disAsm = new DisAsm();
+    addChip(this);
+
+    capacitor = new Capacitor(this,
+            10e-6 /* capacitance, farads */,
+            4.5 /* initial voltage, volts */,
+            3.0 /* voltage divider factor */, // XXX WISPism
+            2.5 /* voltage check reference voltage */); // XXX WISPism
+
+    /* trap reads to Capacitor.voltageReaderAddress */
+    memIn[Capacitor.voltageReaderAddress] =
+        memIn[Capacitor.voltageReaderAddress + 1] = capacitor;
+
+    System.err.println("Set voltage reader to " + capacitor);
+    setRegisterWriteMonitor(SP, new CPUMonitor() {
+              public void cpuAction(int type, int addr, int data) {
+                int stacksize = map.stackStartAddress - readRegister(SP);
+                if (stacksize == map.stackStartAddress) { return; }
+                System.err.println("TIME/STACKSIZE," + getTimeMillis() + "," +
+                    stacksize);
+              }
+            });
+    this.deathThreshold = 1.80; // V
+    this.resurrectionThreshold = 3.0; //V
   }
 
   public double getCPUPercent() {
@@ -91,6 +118,7 @@ public class MSP430 extends MSP430Core {
   }
 
   public void cpuloop() throws EmulationException {
+    System.err.println("cpuloop() called");
     if (isRunning()) {
       throw new IllegalStateException("already running");
     }
@@ -98,6 +126,7 @@ public class MSP430 extends MSP430Core {
     // ??? - power-up  should be executed?!
     time = System.currentTimeMillis();
     run();
+    setRunning(false);
   }
 
   private void run() throws EmulationException {
@@ -131,21 +160,6 @@ public class MSP430 extends MSP430Core {
 		tracePos = 0;
 	}
       }
-
-      /* Just a test to see if it gets down to a reasonable speed */
-      if (cycles > nextSleep) {
-	try {
-	  Thread.sleep(10);
-	} catch (Exception e) {
-	}
-	// Frequency = 100 * cycles ratio
-	// Ratio = Frq / 100
-	nextSleep = cycles + sleepRate;
-      }
-
-//       if ((instruction & 0xff80) == CALL) {
-// 	System.out.println("Call to PC = " + reg[PC]);
-//       }
     }
   }
 

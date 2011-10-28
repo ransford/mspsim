@@ -39,6 +39,8 @@
  *           $Revision$
  */
 package se.sics.mspsim.cli;
+import java.io.IOException;
+
 import se.sics.mspsim.core.CPUMonitor;
 import se.sics.mspsim.core.DbgInstruction;
 import se.sics.mspsim.core.DisAsm;
@@ -54,6 +56,7 @@ import se.sics.mspsim.util.ELF;
 import se.sics.mspsim.util.GDBStubs;
 import se.sics.mspsim.util.MapEntry;
 import se.sics.mspsim.util.Utils;
+import se.sics.mspsim.util.CheckpointValidator;
 
 public class DebugCommands implements CommandBundle {
   private long lastCall = 0;
@@ -68,12 +71,16 @@ public class DebugCommands implements CommandBundle {
     this.registry = registry;
     final MSP430 cpu = (MSP430) registry.getComponent(MSP430.class);
     final GenericNode node = (GenericNode) registry.getComponent("node");
+    final CheckpointValidator chv = (CheckpointValidator) registry.getComponent("checkpointing");
+
     if (cpu != null) {
       ch.registerCommand("break", new BasicAsyncCommand("add a breakpoint to a given address or symbol",
           "<address or symbol>") {
         int address = 0;
         public int executeCommand(final CommandContext context) {
-          int baddr = context.getArgumentAsAddress(0);
+          int baddr;
+          for (int i = 0; i < context.getArgumentCount(); ++i) {
+            baddr = context.getArgumentAsAddress(i);
           if (baddr < 0) {
             context.err.println("unknown symbol: " + context.getArgument(0));
             return 1;
@@ -164,6 +171,73 @@ public class DebugCommands implements CommandBundle {
         }
       });
 
+      ch.registerCommand("watchwrite",
+              new BasicAsyncCommand("add a write watch to a given address or symbol", "<address or symbol> [length] [char | hex | break]") {
+            int mode = 0;
+            int address = 0;
+            int length = 1;
+            public int executeCommand(final CommandContext context) {
+              int baddr = context.getArgumentAsAddress(0);
+              if (baddr == -1) {
+                context.err.println("unknown symbol: " + context.getArgument(0));
+                return -1;
+              }
+              if (context.getArgumentCount() > 1) {
+                  for (int i = 1; i < context.getArgumentCount(); i++) {
+                      String modeStr = context.getArgument(i);
+                      if (Character.isDigit(modeStr.charAt(0))) {
+                          length = Integer.parseInt(modeStr);
+                      } else if ("char".equals(modeStr)) {
+                          mode = 1;
+                      } else if ("break".equals(modeStr)) {
+                          mode = 2;
+                      } else if ("hex".equals(modeStr)) {
+                          mode = 3;
+                      }
+                  }
+              }
+              CPUMonitor monitor = new CPUMonitor() {
+                  public void cpuAction(int type, int adr, int data) {
+                	  if (type != MEMORY_WRITE) return;
+                      if (mode == 0 || mode == 2) {
+                          int pc = cpu.readRegister(0);
+                          String adrStr = getSymOrAddr(context, adr);
+                          String pcStr = getSymOrAddrELF(getELF(), pc);
+                          context.out.println("*** write from " + pcStr +
+                                  ": " + adrStr + " = " + data);
+                          if (mode == 2) {
+                              cpu.stop();
+                          }
+                      } else {
+                          if (length > 1) {
+                              for (int i = address; i < address + length; i++) {
+                                  context.out.print(Utils.toString(cpu.memory[i], Utils.BYTE, mode == 1 ? Utils.ASCII : Utils.HEX));
+                              }
+                              context.out.println();
+                          } else {
+                              context.out.print(Utils.toString(data, Utils.BYTE, mode == 1 ? Utils.ASCII : Utils.HEX));
+                          }
+                      }
+                  }
+              };
+
+              cpu.setBreakPoint(address = baddr, monitor);
+              if (length > 1) {
+                  for (int i = 1; i < length; i++) {
+                      cpu.setBreakPoint(address + i, monitor);
+                }
+              }
+              context.err.println("Watch set at $" + Utils.hex16(baddr));
+              return 0;
+            }
+
+            public void stopCommand(CommandContext context) {
+              cpu.clearBreakPoint(address);
+              context.exit(0);
+            }
+          });
+
+      
       ch.registerCommand("watchreg",
           new BasicAsyncCommand("add a write watch to a given register", "<register> [int]") {
         int mode = 0;
@@ -191,7 +265,7 @@ public class DebugCommands implements CommandBundle {
                 context.out.println("*** Write from " + pcStr +
                     ": " + adrStr + " = " + data);
               } else {
-                context.out.println(data);
+                context.err.println(data);
               }
             }
           });
@@ -314,10 +388,30 @@ public class DebugCommands implements CommandBundle {
             int stackEnd = context.getMapTable().heapStartAddress;
             int stackStart = context.getMapTable().stackStartAddress;
             int current = cpu.readRegister(MSP430Constants.SP);
-            context.out.println("Current stack: $" + cpu.getAddressAsString(current) + " (" + (stackStart - current) + " used of " + (stackStart - stackEnd) + ')');
+            context.out.println("Current stack: $" + cpu.getAddressAsString(current) + " (" + (stackStart - current) + " used of " + (stackStart - stackEnd) + " B)");
+
+            for (int i = stackStart-2; i >= current ; i -= 2) {
+              context.out.println(" 0x" + Utils.hex16(i) + " = " +
+                  Utils.hex16(cpu.read(i, i >= 0x100)));
+            }
             return 0;
           }
         });
+
+        ch.registerCommand("registers", new BasicCommand("show register contents", "") {
+          public int executeCommand(CommandContext context) {
+            context.out.println("Registers:");
+            for (int i = 0; i < cpu.reg.length; ++i) {
+              context.out.printf(" %4s%3s = %s\n",
+                  (i < MSP430Constants.REGISTER_NAMES.length) ?
+                    getRegisterName(i) + "/" : "",
+                  "R" + i,
+                  Utils.hex16(cpu.readRegister(i)));
+            }
+            return 0;
+          }
+        });
+
         ch.registerCommand("print", new BasicCommand("print value of an address or symbol", "<address or symbol>") {
           public int executeCommand(CommandContext context) {
             int adr = context.getArgumentAsAddress(0);
@@ -350,7 +444,16 @@ public class DebugCommands implements CommandBundle {
           }
         });
 
-        ch.registerCommand("time", new BasicCommand("print the elapse time and cycles", "") {
+        ch.registerCommand("cycles", new BasicCommand("print cycle counter", "") {
+            public int executeCommand(CommandContext context) {
+              context.err.println("Cycle counter: " + cpu.cycles + " (total " +
+                  (cpu.getCapacitor().accumCycleCount + cpu.cycles) + " over " +
+                  cpu.getCapacitor().getNumLifecycles() + " lifecycles)");
+              return 0;
+            }
+        });
+
+        ch.registerCommand("time", new BasicCommand("print the elapsed time", "") {
           public int executeCommand(CommandContext context) {
             long time = ((long)(cpu.getTimeMillis()));
 	    long wallDiff = System.currentTimeMillis() - lastWall;
@@ -425,6 +528,31 @@ public class DebugCommands implements CommandBundle {
             return 0;
           }
         });
+
+        ch.registerCommand("memv", new BasicCommand("dump memory verbosely",
+                    "<start address> <num_words> [rev]") {
+                public int executeCommand(final CommandContext context) {
+                  int start = context.getArgumentAsAddress(0);
+                  int count = context.getArgumentAsInt(1);
+                  int end = start + count*2;
+                  int data;
+                  if ((context.getArgumentCount() == 3) &&
+                      context.getArgument(2).startsWith("r")) {
+                    for (int i = end-2; i >= start; i -= 2) {
+                      data = cpu.memory[i] + (cpu.memory[i+1] << 8);
+                      context.out.println(" $" + Utils.hex16(i) + " = " +
+                          Utils.hex16(data));
+                    }
+                  } else {
+                    for (int i = start; i < end; i += 2) {
+                      data = cpu.memory[i] + (cpu.memory[i+1] << 8);
+                      context.out.println(" $" + Utils.hex16(i) + " = " +
+                          Utils.hex16(data));
+                    }
+                  }
+                  return 0;
+                }
+              });
 
         ch.registerCommand("mset", new BasicCommand("set memory", "<address> [type] <value> [value ...]") {
           public int executeCommand(final CommandContext context) {
@@ -602,6 +730,139 @@ public class DebugCommands implements CommandBundle {
               return 0;
             }
           });        
+
+        ch.registerCommand("nocap",
+                new BasicCommand("simulate tethered power (no cap)","") {
+                  public int executeCommand (final CommandContext context) {
+                    cpu.getCapacitor().disable();
+                    return 0;
+                  }
+                });
+
+        ch.registerCommand("hushcap",
+                new BasicCommand("toggle the capacitor's voltage printing","") {
+                  public int executeCommand (final CommandContext context) {
+                    cpu.getCapacitor().toggleHush();
+                    return 0;
+                  }
+                });
+        
+        ch.registerCommand("findchkpt",
+        		new BasicCommand("find the active checkpoint bundle (if any)",
+        				"") {
+					public int executeCommand(final CommandContext context) {
+						CheckpointValidator cv =
+							(CheckpointValidator)cpu.registry.getComponent("checkpointing");
+						int activeBundle = cv.findActiveBundlePointer(cpu.memory);
+						context.out.println((activeBundle == 0xFFFF) ?
+								"No active bundle." :
+									("Active bundle: " +
+											Utils.hex16(activeBundle)));
+						return 0;
+					}
+				});
+        
+        ch.registerCommand("voltage",
+        		new BasicCommand("print the current capacitor voltage", "") {
+					public int executeCommand(CommandContext context) {
+						context.out.println(cpu.getCapacitor().getVoltage());
+						return 0;
+					}
+				});
+
+        ch.registerCommand("readbundle",
+                new BasicCommand("print a checkpoint bundle starting at addr",
+                    "<addr>") {
+                  private int readWord (int addr) {
+                    return (cpu.memory[addr] | (cpu.memory[addr+1] << 8));
+                  }
+                  public int executeCommand (final CommandContext context) {
+                    int addr = context.getArgumentAsAddress(0);
+                    java.io.PrintStream o = context.out;
+                    int cp_stacksize = cpu.memory[addr+1]; // stack portion
+                    int cp_globalsize = cpu.memory[addr];  // .data portion
+                    if (cp_globalsize + cp_stacksize > 256) {
+                      o.println("No bundle at $" + Utils.hex16(addr) + ".");
+                      return 0;
+                    }
+                    o.println("REGISTERS:");
+                    o.println(" PC/R0: " + Utils.hex16(readWord(addr+2)));
+                    o.println(" SP/R1: " + Utils.hex16(readWord(addr+4)));
+                    o.println("    R2: " + Utils.hex16(readWord(addr+6)));
+                    o.println("    R4: " + Utils.hex16(readWord(addr+8)));
+                    o.println("    R5: " + Utils.hex16(readWord(addr+10)));
+                    o.println("    R6: " + Utils.hex16(readWord(addr+12)));
+                    o.println("    R7: " + Utils.hex16(readWord(addr+14)));
+                    o.println("    R8: " + Utils.hex16(readWord(addr+16)));
+                    o.println("    R9: " + Utils.hex16(readWord(addr+18)));
+                    o.println("   R10: " + Utils.hex16(readWord(addr+20)));
+                    o.println("   R11: " + Utils.hex16(readWord(addr+22)));
+                    o.println("   R12: " + Utils.hex16(readWord(addr+24)));
+                    o.println("   R13: " + Utils.hex16(readWord(addr+26)));
+                    o.println("   R14: " + Utils.hex16(readWord(addr+28)));
+                    o.println("   R15: " + Utils.hex16(readWord(addr+30)));
+                    o.println("STACK (" + cp_stacksize + " bytes):");
+                    for (int i = cp_stacksize-2; i >= 0; i -= 2) {
+                      o.println(" $" + Utils.hex16(0x300-cp_stacksize+i) + ": "
+                              + Utils.hex16(readWord(addr+32+i)));
+                      // XXX remove hard-coded F2131-specific 0x300 addr
+                    }
+                    o.println("GLOBALS (" + cp_globalsize + " bytes):");
+                    for (int i = 0; i < cp_globalsize; i += 2) {
+                      o.println(" " +
+                        Utils.hex16(readWord(addr+32+cp_stacksize+i)));
+                    }
+                    o.println("END MARKER: " + Utils.hex16(readWord(addr + 32
+                    		+ cp_stacksize + cp_globalsize)));
+                    o.println("NEXT BYTE: " + Utils.hex16(addr + 32 +
+                    		cp_stacksize + cp_globalsize + 2));
+                    return 0;
+                  }
+                });
+
+	ch.registerCommand("checkpt", new BasicCommand("validate checkpoints", "<seg1 addr> <seg2 addr> <cpfunc addr> [logfile pfx]") {
+          public int executeCommand(final CommandContext context) 
+          {
+            int f1addr = context.getArgumentAsAddress(0);
+            int f2addr = context.getArgumentAsAddress(1);
+	    	int func_addr = context.getArgumentAsAddress(2);
+	    
+	    	String logfile = null;
+            int gsize;
+
+            
+            
+		    if (func_addr == -1)
+			{
+				context.err.println("checkpoint function not found!");
+				return 1;
+			}
+	
+		    int gsize_addr = context.getAddressFromSymbol("GlobalAllocSize");
+		    if (gsize_addr == -1)
+			{
+				context.err.println("GlobalAllocSize symbol not found!");
+				return 1;
+			}
+		    gsize = cpu.memory[gsize_addr++];
+		    gsize |= (cpu.memory[gsize_addr] << 8);
+		    gsize = (gsize + 1) & 0xfe; // round up to next word boundary
+		    //if (DEBUG)
+		    {
+		    	context.out.println("GlobalAllocSize == "+gsize+" Bytes.");
+		    }
+		    
+		    if (context.getArgumentCount() == 4)
+            {
+            	logfile = context.getArgument(3);
+            } 
+		    chv.init(f1addr,f2addr, func_addr, gsize, logfile);
+		    
+	    
+            context.out.println("Checkpoint registered.");
+            return 0;
+          }
+        });
 
         ch.registerCommand("events", new BasicCommand("print event queues", "") {
             @Override

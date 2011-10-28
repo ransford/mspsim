@@ -60,12 +60,14 @@ public interface Profiler {
   public void profileRETI(long cycles);
 
   public void resetProfile();
+  public void resetCallStackPointer();
   public void clearProfile();
 
   public void addCallListener(CallListener listener);
   public void removeCallListener(CallListener listener);
   
   public void printProfile(PrintStream out);
+  public long getMementosCycles();
 
   public void printProfile(PrintStream out, Properties parameters);
 

@@ -38,6 +38,7 @@ package se.sics.mspsim.core;
 import java.util.Arrays;
 
 import se.sics.mspsim.util.Utils;
+import edu.umass.energy.Capacitor;
 
 public class Flash extends IOUnit {
   
@@ -89,7 +90,7 @@ public class Flash extends IOUnit {
   };
   
   private static final int MASS_ERASE_TIME = 5297;
-  private static final int SEGMENT_ERASE_TIME = 4819;
+	private static final int SEGMENT_ERASE_TIME = 4354;
   
   private static final int WRITE_TIME = 35;
 
@@ -117,7 +118,10 @@ public class Flash extends IOUnit {
   
   private TimeEvent end_process = new TimeEvent(0) {
     public void execute(long t) {
+			System.err.println("Unblocking CPU...");
       blocked_cpu = false;
+			cpu.getCapacitor().updateVoltage(false);
+			cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
       
       switch(currentWriteMode) {
       case NONE:
@@ -145,9 +149,10 @@ public class Flash extends IOUnit {
 	  logw("Last access in block mode. Forced exit?");
 	  currentWriteMode = WriteMode.WRITE_BLOCK_FINISH;
 	}
-/*	if (DEBUG) {
-	  System.out.println("Write cycle complete, flagged WAIT.");
-	} */
+				/*
+				 * if (DEBUG) {
+				 * System.out.println("Write cycle complete, flagged WAIT."); }
+				 */
 	wait = true;
 	break;
 	
@@ -162,6 +167,9 @@ public class Flash extends IOUnit {
 	break;
       }
     }
+		public String toString () {
+			return this.getClass().getName();
+		}
   };
   
   public Flash(MSP430Core cpu, int[] memory, FlashRange main_range,
@@ -172,9 +180,8 @@ public class Flash extends IOUnit {
     this.main_range = main_range;
     this.info_range = info_range;
     locked = true;
-
-    Arrays.fill(memory, main_range.start, main_range.end, 0xff);
-    Arrays.fill(memory, info_range.start, info_range.end, 0xff);
+    
+    clearAll();
 
     reset(MSP430.RESET_POR);
   }
@@ -203,6 +210,7 @@ public class Flash extends IOUnit {
   }
   
   private void waitFlashProcess(int time) {
+		System.err.println("waitFlashProcess("+time+")");
     int instr_addr = cpu.readRegister(MSP430.PC);
     int freqdiv = getFlashClockDiv();
     int myfreq;
@@ -235,7 +243,11 @@ public class Flash extends IOUnit {
     case MCLK:
       if (DEBUG)
 	log("Using MCLK source with div=" + freqdiv);
-      cpu.scheduleCycleEvent(end_process, (long)time * freqdiv);
+      long ncycles = (long)time * freqdiv;
+      System.err.println("#cycles for flash: " + ncycles);
+      System.err.println("About to schedule flash-unblock event for cycle " + (cpu.cycles+ncycles));
+      cpu.scheduleCycleEvent(end_process, cpu.cycles + ncycles);
+      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_FLWRI);
       break;
     }
   }
@@ -243,7 +255,16 @@ public class Flash extends IOUnit {
   public boolean needsTick() {
     return false;
   }
-  
+
+  private void clearAll() {
+    for (int i = main_range.start; i < main_range.end; i++) {
+      memory[i] = 0xff;
+    }
+    for (int i = info_range.start; i < info_range.end; i++) {
+      memory[i] = 0xff;
+    }
+  }
+
   public void flashWrite(int address, int data, boolean word) {
     int wait_time = -1;
     
@@ -291,12 +312,7 @@ public class Flash extends IOUnit {
       break;
       
     case ERASE_ALL:
-      for (int i = main_range.start; i < main_range.end; i++) {
-	memory[i] = 0xff;
-      }
-      for (int i = info_range.start; i < main_range.end; i++) {
-	memory[i] = 0xff;
-      }
+			clearAll();
       waitFlashProcess(MASS_ERASE_TIME);
       break;
     case WRITE_SINGLE:

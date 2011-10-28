@@ -154,6 +154,7 @@ public class EventQueue {
       clr.time = 0;
       clr.scheduledIn = null;
     }
+    nextTime = 0;
     first = null;
     eventCount = 0;
   }

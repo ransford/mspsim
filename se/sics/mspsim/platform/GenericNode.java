@@ -37,6 +37,7 @@ package se.sics.mspsim.platform;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
+import java.lang.Thread;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
@@ -44,6 +45,12 @@ import java.net.URL;
 
 import javax.swing.JFrame;
 
+import java.util.Vector;
+
+import edu.umass.energy.EnergyFairy;
+import edu.umass.energy.Capacitor;
+
+import se.sics.jipv6.util.Utils;
 import se.sics.mspsim.cli.CommandHandler;
 import se.sics.mspsim.cli.DebugCommands;
 import se.sics.mspsim.cli.FileCommands;
@@ -58,6 +65,7 @@ import se.sics.mspsim.core.EmulationLogger;
 import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.core.MSP430Config;
 import se.sics.mspsim.core.MSP430Constants;
+import se.sics.mspsim.core.MSP430Core;
 import se.sics.mspsim.extutil.highlight.HighlightSourceViewer;
 import se.sics.mspsim.ui.ConsoleUI;
 import se.sics.mspsim.ui.ControlUI;
@@ -74,6 +82,7 @@ import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.OperatingModeStatistics;
 import se.sics.mspsim.util.PluginRepository;
 import se.sics.mspsim.util.StatCommands;
+import se.sics.mspsim.util.CheckpointValidator;
 
 public abstract class GenericNode extends Chip implements Runnable {
 
@@ -86,6 +95,22 @@ public abstract class GenericNode extends Chip implements Runnable {
   protected String firmwareFile = null;
   protected ELF elf;
   protected OperatingModeStatistics stats;
+	protected CheckpointValidator checkpointing = new CheckpointValidator(this);
+
+	protected int expectedExitCode = -1;
+	protected Vector<MemoryContainer> memoryCaptures = new Vector<MemoryContainer>();
+	private long prevWasted = 10000000000L;
+	private double defaultAdjustmentMagnitude = 0.2; 
+	private double prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
+	public static final int defaultMspType = MSP430Core.MSP430F2132;
+
+	public GenericNode() {
+		cpu = new MSP430(defaultMspType, registry);
+	}
+	
+	public GenericNode(int mspType) {
+		cpu = new MSP430(mspType, registry);
+	}
 
 
   public GenericNode(String id, MSP430Config config) {
@@ -190,8 +215,31 @@ public abstract class GenericNode extends Chip implements Runnable {
         if (ch != null) {
           ch.lineRead("source \"" + script + '"');
         }
+			} else {
+				System.err.println("Cannot read file "
+						+ config.getProperty("autorun"));
+				System.exit(1);
       }
     }
+
+		String expectedExitCodeStr = config.getProperty("expectedexitcode");
+		if (null != expectedExitCodeStr) {
+			expectedExitCodeStr = expectedExitCodeStr.trim();
+			try {
+				if (expectedExitCodeStr.startsWith("0x")) {
+					this.expectedExitCode = Integer.parseInt(
+							expectedExitCodeStr.substring(2), 16);
+				} else {
+					this.expectedExitCode = Integer
+							.parseInt(expectedExitCodeStr);
+				}
+			} catch (NumberFormatException nfe) {
+				System.err.println("-expectedexitcode argument must resemble "
+						+ "1234 or 0xabc");
+				System.exit(1);
+			}
+		}
+
     config.setProperty("firmwareFile", firmwareFile);
     System.out.println("-----------------------------------------------");
     System.out.println("MSPSim " + MSP430Constants.VERSION + " starting firmware: " + firmwareFile);
@@ -210,6 +258,7 @@ public abstract class GenericNode extends Chip implements Runnable {
     registry.registerComponent("cpu", cpu);
     registry.registerComponent("node", this);
     registry.registerComponent("config", config);
+		registry.registerComponent("checkpointing", checkpointing);
     cpu.setEmulationLogger(logger);
     
     CommandHandler ch = (CommandHandler) registry.getComponent("commandHandler");
@@ -253,6 +302,15 @@ public abstract class GenericNode extends Chip implements Runnable {
 
     registry.start();
 
+		// attach a voltage trace file if "-voltagetrace" is specified on
+		// cmdline
+		String voltageTraceFile = config.getProperty("voltagetrace");
+		if (null != voltageTraceFile) {
+			Capacitor c = cpu.getCapacitor();
+			c.setEnergyFairy(new EnergyFairy(voltageTraceFile));
+			c.setInitialVoltage(0.0);
+		}
+
     cpu.reset();
   }
   
@@ -261,6 +319,33 @@ public abstract class GenericNode extends Chip implements Runnable {
     if (!cpu.isRunning()) {
       try {
         cpu.cpuloop(); 
+      } catch (StopExecutionException see) {
+        cpu.stop();
+        System.err.println("Execution terminated (" + see.getMessage()
+            + ")");
+        boolean ewd = config
+          .getPropertyAsBoolean("exitwhendone", false);
+        if (this.expectedExitCode != -1) { // user specified
+          // -expectedexitcode
+          if (this.expectedExitCode == see.getR15Val()) {
+            if (ewd) {
+              System.exit(0);
+            }
+          } else { // uh-oh, bad exit code
+            System.err.println("Exit code "
+                + Utils.hex16(see.getR15Val())
+                + " did not match expected ("
+                + Utils.hex16(expectedExitCode) + ")");
+            if (ewd) {
+              System.exit(1);
+            }
+          }
+        } else {
+          if (ewd) {
+            System.exit(0);
+          }
+        }
+        this.stop();
       } catch (Exception e) {
         /* what should we do here */
         e.printStackTrace();
@@ -271,7 +356,8 @@ public abstract class GenericNode extends Chip implements Runnable {
   public void start() {
     if (!cpu.isRunning()) {
       Thread thread = new Thread(this);
-      // Set this thread to normal priority in case the start method was called
+			// Set this thread to normal priority in case the start method was
+			// called
       // from the higher priority AWT thread.
       thread.setPriority(Thread.NORM_PRIORITY);
       thread.start();
@@ -328,4 +414,102 @@ public abstract class GenericNode extends Chip implements Runnable {
   public int getConfiguration(int param) {
       return 0;
   }
+
+	public void captureMemory() {
+		memoryCaptures.add(new MemoryContainer(cpu.memory));
+}
+	
+	public MemoryContainer getLastMemoryCapture() {
+		return memoryCaptures.lastElement();
+	}
+
+	/* CPU calls this method to reports its own death */
+	public void reportDeath() throws ShouldRetryLifecycleException {
+		long cycles = cpu.cycles;
+		long wasted = cpu.getWastedCycles();
+		double ot = cpu.getOracleThreshold();
+		double adjustmentDirection = 0.0;
+		double adjustmentMagnitude = 0.0;
+
+		System.err.println("reportDeath(" + ot + "): " + cycles + " cycles; "
+				+ wasted + " wasted; ");
+		
+		/* report on the contents of memory */
+		CheckpointValidator cv =
+			(CheckpointValidator)cpu.registry.getComponent("checkpointing");
+		
+		int activeBundle = cv.findActiveBundlePointer(cpu.memory);
+		System.err.println("Active bundle: " + Utils.hex16(activeBundle));
+		System.err.println("Segment @" +
+				Utils.hex16(CheckpointValidator.SEGMENT_A) + " is " +
+				(CheckpointValidator.segmentIsEmpty(cpu.memory,
+						CheckpointValidator.SEGMENT_A)
+							? "empty" : "nonempty") + ", is " +
+				(CheckpointValidator.segmentIsMarkedForErasure(cpu.memory,
+						CheckpointValidator.SEGMENT_A)
+							? "marked for erasure" : "not marked for erasure"));
+		System.err.println("Segment @" +
+				Utils.hex16(CheckpointValidator.SEGMENT_B) + " is " +
+				(CheckpointValidator.segmentIsEmpty(cpu.memory,
+						CheckpointValidator.SEGMENT_B)
+							? "empty" : "nonempty") + ", is " +
+				(CheckpointValidator.segmentIsMarkedForErasure(cpu.memory,
+						CheckpointValidator.SEGMENT_B)
+							? "marked for erasure" : "not marked for erasure"));
+		
+		if (ot < 0) return;
+		
+		MemoryContainer lastCapture = memoryCaptures.lastElement();
+		System.err.println("Most recent (of " + memoryCaptures.size()
+				+ ") capture length: " + lastCapture.getMemory().length);
+		//stop();
+
+		if (wasted == cycles) {
+			// wasted the whole lifecycle; could do better by raising the oracle
+			// threshold.  go up some amount, then go down by half that amount, for
+			// effectively binary search
+			adjustmentDirection = 1;
+			adjustmentMagnitude = prevAdjustmentMagnitude;
+		} else if (wasted > 0) {
+			// didn't waste the whole lifecycle but wasted something; therefore
+			// we could do better by lowering the oracle threshold
+			if (wasted > prevWasted) {
+				adjustmentMagnitude = prevAdjustmentMagnitude;
+				throw new ShouldRetryLifecycleException("Refusing to " +
+						"increase waste; Bumping oracle threshold by " +
+						adjustmentMagnitude + " V", adjustmentMagnitude);
+			} else if (wasted == prevWasted) {
+				System.err.println("Oracle commits to Vthresh=" +
+						cpu.getOracleThreshold() + " V (bottomed out)");
+				prevWasted = 10000000000L;
+				prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
+				return;
+			} else {
+				adjustmentDirection = -1;
+				adjustmentMagnitude = prevAdjustmentMagnitude / 2.0;
+				if (adjustmentMagnitude <= cpu.oracleEpsilon) {
+					System.err.println("Oracle commits to Vthresh=" +
+							cpu.getOracleThreshold() + " V (not split hairs)");
+					prevWasted = 10000000000L;
+					prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
+					return;
+				}
+			}
+		} else if (wasted == 0) {
+			System.err.println("Oracle commits to Vthresh=" +
+					cpu.getOracleThreshold() + " V (nailed it)");
+			prevWasted = 10000000000L;
+			prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
+			return;
+		} else {
+			throw new RuntimeException("wtf");
+		}
+		prevAdjustmentMagnitude = adjustmentMagnitude;
+		adjustmentMagnitude = adjustmentDirection * adjustmentMagnitude;
+		throw new ShouldRetryLifecycleException("Bumping oracle threshold by " +
+				adjustmentMagnitude + " V",
+				adjustmentMagnitude);
+		// try { Thread.sleep(10000); } catch (InterruptedException ie) {}
+	}
+
 }

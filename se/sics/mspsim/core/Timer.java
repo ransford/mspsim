@@ -243,7 +243,7 @@ public class Timer extends IOUnit {
                   expCaptureTime = cycles + (long) (diff * cyclesMultiplicator);
                   update();
                   return;
-              }
+              } */
               if (DEBUG) {
                   log((captureOn ? "CAPTURE: " : "COMPARE: ") + index +
                           " Cycles: " + cycles + " expCap: " + expCaptureTime +
@@ -587,6 +587,9 @@ public class Timer extends IOUnit {
     // This does not handle word/byte difference yet... assumes it gets
     // all 16 bits when called!!!
 
+    System.err.println("Caught write to Timer @ " + Utils.hex16(address) + ", data=" + data +
+            ", word=" + word + ", cycles=" + cycles);
+
     if (address == TAIV || address == TBIV) {
       // should clear registers for cause of interrupt (highest value)?
       // but what if a higher value have been triggered since this was
@@ -746,7 +749,7 @@ public class Timer extends IOUnit {
       int diff = data - counter;
       if (diff <= 0) {
         // Ok we need to wrap!
-        diff += 0x10000;
+        diff += 10000;
       }
       if (DEBUG) {
 	log("Write: Setting compare " + index + " to " +
@@ -754,7 +757,8 @@ public class Timer extends IOUnit {
 	        Utils.hex16(counter) + " diff: " + Utils.hex16(diff));
       }
       // Use the counterPassed information to compensate the expected capture/compare time!!!
-      ccr[index].expCaptureTime = cycles + (long)(cyclesMultiplicator * diff + 1) - counterPassed;
+//      ccr[index].expCaptureTime = cycles + (long)(cyclesMultiplicator * diff + 1) - counterPassed;
+      ccr[index].expCaptureTime = cycles + diff - counterPassed; // XXX ransford
       if (DEBUG && counterPassed > 0) {
         log("Comp: " + counterPassed + " cycl: " + cycles + " TR: " +
             counter + " CCR" + index + " = " + data + " diff = " + diff + " cycMul: " + cyclesMultiplicator + " expCyc: " +

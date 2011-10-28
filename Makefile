@@ -11,7 +11,7 @@
 ###############################################################
 # Settings
 ###############################################################
-CC=javac
+CC=javac -g
 JAVA=java
 JAR=jar
 RM=rm -f
@@ -61,6 +61,7 @@ ifndef FIRMWAREFILE
 ESBFIRMWARE = firmware/esb/sensor-demo.firmware
 SKYFIRMWARE = firmware/sky/blink.firmware
 Z1FIRMWARE = firmware/z1/blink.firmware
+WISPFIRMWARE = firmware/wisp/dlwisp41.firmware
 else
 ESBFIRMWARE = ${FIRMWAREFILE}
 SKYFIRMWARE = ${FIRMWAREFILE}
@@ -73,7 +74,7 @@ TIMERTEST := tests/timertest.firmware
 SCRIPTS := ${addprefix scripts/,autorun.sc duty.sc}
 BINARY := README.txt license.txt CHANGE_LOG.txt images/*.jpg firmware/*/*.firmware ${SCRIPTS}
 
-PACKAGES := se/sics/mspsim ${addprefix se/sics/mspsim/,core chip cli config debug platform ${addprefix platform/,esb sky jcreate sentillausb z1} plugin profiler net ui util extutil/highlight extutil/jfreechart}
+PACKAGES := se/sics/mspsim edu/umass/energy ${addprefix se/sics/mspsim/,core chip cli config debug platform ${addprefix platform/,esb sky jcreate sentillausb z1 wisp} plugin profiler net ui util extutil/highlight extutil/jfreechart}
 
 SOURCES := ${wildcard *.java $(addsuffix /*.java,$(PACKAGES))}
 
@@ -85,7 +86,7 @@ JARFILE := mspsim.jar
 # MAKE
 ###############################################################
 
-.PHONY: all compile jar help run runesb runsky test cputest $(CPUTEST) mtest
+.PHONY: all compile jar help run runesb runsky test cputest $(CPUTEST) mtest runwisp
 
 all:	compile
 
@@ -102,7 +103,7 @@ JarManifest.txt:
 	@echo >>$@ "Class-path: ${LIBS}"
 
 help:
-	@echo "Usage: make [all,compile,clean,run,runsky,runesb]"
+	@echo "Usage: make [all,compile,clean,run,runsky,runesb,runwisp]"
 
 run:	compile
 	$(JAVA) $(JAVAARGS) se.sics.mspsim.util.IHexReader $(ARGS) $(FIRMWAREFILE) $(MAPFILE)
@@ -121,8 +122,11 @@ runtelos:	compile
 runz1:	compile
 	$(JAVA) $(JAVAARGS) se.sics.mspsim.platform.z1.Z1Node $(ARGS) $(Z1FIRMWARE) $(MAPFILE)
 
+runwisp:	compile
+	$(JAVA) $(JAVAARGS) se.sics.mspsim.platform.wisp.WispNode $(ARGS) $(WISPFIRMWARE) -nogui -autorun=scripts/wisp.sc $(MAPFILE)
 
-test:	cputest
+
+test:	cputest footest
 
 cputest:	$(CPUTEST)
 	$(JAVA) $(JAVAARGS) se.sics.mspsim.util.Test $(CPUTEST)

@@ -456,7 +456,33 @@ public class MiscCommands implements CommandBundle {
         }
     });
 
+    handler.registerCommand("oracleThreshold",
+    		new BasicCommand("set the oracle's checkpointing threshold", "<voltage>") {
+    	public int executeCommand(CommandContext context) {
+            MSP430 cpu = (MSP430) registry.getComponent(MSP430.class);
+            double otv = context.getArgumentAsDouble(0);
+            cpu.setOracleThreshold(otv);
+    		return 0;
+    	}
+    });
     
+    handler.registerCommand("deathThreshold",
+    		new BasicCommand("set the CPU's minimum-voltage threshold", "<voltage>") {
+    	public int executeCommand(CommandContext context) {
+            MSP430 cpu = (MSP430) registry.getComponent(MSP430.class);
+            cpu.deathThreshold = context.getArgumentAsDouble(0);
+    		return 0;
+    	}
+    });
+
+    handler.registerCommand("resurrectionThreshold",
+    		new BasicCommand("set the CPU's resurrection threshold", "<voltage>") {
+    	public int executeCommand(CommandContext context) {
+            MSP430 cpu = (MSP430) registry.getComponent(MSP430.class);
+            cpu.resurrectionThreshold = context.getArgumentAsDouble(0);
+    		return 0;
+    	}
+    });
   }
 
   private static ServiceComponent getServiceForName(ComponentRegistry registry, String name) {

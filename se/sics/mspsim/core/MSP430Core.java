@@ -42,15 +42,26 @@
 package se.sics.mspsim.core;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.lang.Math;
+
+import se.sics.mspsim.platform.GenericNode;
+import se.sics.mspsim.platform.MemoryContainer;
+import se.sics.mspsim.platform.ShouldRetryLifecycleException;
 import se.sics.mspsim.util.ComponentRegistry;
 import se.sics.mspsim.util.MapEntry;
 import se.sics.mspsim.util.MapTable;
+import se.sics.mspsim.util.SimpleProfiler;
 import se.sics.mspsim.util.Utils;
+
+import edu.umass.energy.CapClockSource;
+import edu.umass.energy.Capacitor;
+import edu.umass.energy.DeadTimer;
+import se.sics.mspsim.util.CheckpointValidator;
 
 /**
  * The CPU of the MSP430
  */
-public class MSP430Core extends Chip implements MSP430Constants {
+public class MSP430Core extends Chip implements MSP430Constants, CapClockSource {
 
   public static final int RETURN = 0x4130;
 
@@ -58,6 +69,9 @@ public class MSP430Core extends Chip implements MSP430Constants {
 
   public static final boolean EXCEPTION_ON_BAD_OPERATION = true;
 
+  public static final int MSP430F2132 = 0;
+  public static final int MSP430F1611 = 1;
+  
   // Try it out with 64 k memory
   public final int MAX_MEM;
   public final int MAX_MEM_IO;
@@ -80,6 +94,7 @@ public class MSP430Core extends Chip implements MSP430Constants {
   public int memory[];
   public long cycles = 0;
   public long cpuCycles = 0;
+  public double energyUsed = 0.0;
   MapTable map;
   public final boolean MSP430XArch;
   public final MSP430Config config;
@@ -111,7 +126,7 @@ public class MSP430Core extends Chip implements MSP430Constants {
   protected boolean cpuOff = false;
 
   // Not private since they are needed (for fast access...)
-  protected int dcoFrq = 2500000;
+  protected int dcoFrq = 1000000; //2500000;
   int aclkFrq = 32768;
   int smclkFrq = dcoFrq;
 
@@ -126,19 +141,37 @@ public class MSP430Core extends Chip implements MSP430Constants {
   // Other clocks too...
   long nextEventCycles;
   private EventQueue vTimeEventQueue = new EventQueue();
-  private long nextVTimeEventCycles;
-
   private EventQueue cycleEventQueue = new EventQueue();
-  private long nextCycleEventCycles;
   
   private BasicClockModule bcs;
   private ArrayList<Chip> chips = new ArrayList<Chip>();
 
-  ComponentRegistry registry;
+  public ComponentRegistry registry;
   Profiler profiler;
+  boolean resetProfiler = true;
   private Flash flash;
 
   boolean isFlashBusy;
+
+  /* begin mementos */
+  public boolean inCheckpoint = false; // XXX note gross SimpleProfiler hacks
+  private int previousPC = 0;
+  
+  private int totalMementosCycles = 0;
+  private int totalWastedCycles = 0;
+
+  public DeadTimer deadSource;
+  private double offset = 0.0;
+  
+  // oracular checkpointing
+  private double oracleThreshold = -1000.0;
+  public final double oracleEpsilon = 0.0001; // volts
+  private boolean noMoreCheckpointsThisLifecycle = false;
+  private boolean isRetry = false;
+  private int[] retryMemory; // memory contents to restore on lifecycle retry
+
+  private int mainfn_addr;
+  /* end mementos */
   
   public void setIO(int adr, IOUnit io, boolean word) {
       memOut[adr] = io;
@@ -164,6 +197,8 @@ public class MSP430Core extends Chip implements MSP430Constants {
     memOut = new IOUnit[MAX_MEM_IO];
     memIn = new IOUnit[MAX_MEM_IO];
     MSP430XArch = config.MSP430XArch;
+
+    deadSource = new DeadTimer(0.0);
 
     memory = new int[MAX_MEM];
     breakPoints = new CPUMonitor[MAX_MEM];
@@ -379,12 +414,13 @@ public class MSP430Core extends Chip implements MSP430Constants {
   }
   
   public void writeRegister(int r, int value) {
+	int oldval = reg[r];
     // Before the write!
     if (regWriteMonitors[r] != null) {
       regWriteMonitors[r].cpuAction(CPUMonitor.REGISTER_WRITE, r, value);
     }
     reg[r] = value;
-    if (r == SR) {
+    if (r == SR) { //If writing to the status register
       boolean oldCpuOff = cpuOff;
 //      if (((value & GIE) == GIE) != interruptsEnabled) {
 //        System.out.println("InterruptEnabled changed: " + !interruptsEnabled);
@@ -460,14 +496,14 @@ public class MSP430Core extends Chip implements MSP430Constants {
   }
 
   public void setDCOFrq(int frequency, int smclkFrq) {
-    dcoFrq = frequency;
+    dcoFrq = 1000000; //frequency;
     this.smclkFrq = smclkFrq;
     // update last virtual time before updating DCOfactor
     lastVTime = getTime();
     lastCyclesTime = cycles;
     lastMicrosDelta = 0;
     
-    currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / frequency;
+    currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / 1000000;
 
 //    System.out.println("*** DCO: MAX:" + BasicClockModule.MAX_DCO_FRQ +
 //    " current: " + frequency + " DCO_FAC = " + currentDCOFactor);
@@ -482,6 +518,9 @@ public class MSP430Core extends Chip implements MSP430Constants {
   
   // returns global time counted in max speed of DCOs (~5Mhz)
   public long getTime() {
+	  //currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / 1000000;
+	  //How many cycles have passed since what?
+	  //It looks like lastCyclesTime is only updated on reset
     long diff = cycles - lastCyclesTime;
     return lastVTime + (long) (diff * currentDCOFactor);
   }
@@ -494,66 +533,42 @@ public class MSP430Core extends Chip implements MSP430Constants {
     return tmpTime;
   }
   
-  // get elapsed time in seconds
+  // get elapsed time in milliseconds
   public double getTimeMillis() {
-    return 1000.0 * getTime() / BasicClockModule.MAX_DCO_FRQ;
+    return 1000.0 * getTime() / BasicClockModule.DCO_FRQ;
   }
   
   private void executeEvents() {
-    if (cycles >= nextVTimeEventCycles) {
-      if (vTimeEventQueue.eventCount == 0) {
-        nextVTimeEventCycles = cycles + 10000;
-      } else {
-        TimeEvent te = vTimeEventQueue.popFirst();
-        long now = getTime();
-//        if (now > te.time) {
-//          System.out.println("VTimeEvent got delayed by: " + (now - te.time) + " at " +
-//              cycles + " target Time: " + te.time + " class: " + te.getClass().getName());
-//        }
-        te.execute(now);
-        if (vTimeEventQueue.eventCount > 0) {
-          nextVTimeEventCycles = convertVTime(vTimeEventQueue.nextTime);
-        } else {
-          nextVTimeEventCycles = cycles + 10000;          
-        }
-      }
-    }
+	  /* first process a due/overdue TimeEvent (e.g. Capture & Compare Register) */
+	  if (vTimeEventQueue.eventCount != 0 && cycles >= convertVTime(vTimeEventQueue.nextTime))
+		  vTimeEventQueue.popFirst().execute(getTime());
+	  if (vTimeEventQueue.eventCount > 0)
+		  nextEventCycles = convertVTime(vTimeEventQueue.nextTime);
     
-    if (cycles >= nextCycleEventCycles) {
-      if (cycleEventQueue.eventCount == 0) {
-        nextCycleEventCycles = cycles + 10000;
-      } else {
-        TimeEvent te = cycleEventQueue.popFirst();
-        te.execute(cycles);
-        if (cycleEventQueue.eventCount > 0) {
-          nextCycleEventCycles = cycleEventQueue.nextTime;
-        } else {
-          nextCycleEventCycles = cycles + 10000;          
-        }
-      }
-    }
-    
-    // Pick the one with shortest time in the future.
-    nextEventCycles = nextCycleEventCycles < nextVTimeEventCycles ? 
-        nextCycleEventCycles : nextVTimeEventCycles;
+	  /* then process a due/overdue cycle event (e.g., flash write completion).
+	   * These are events that are scheduled to complete when the cycle counter
+	   * reaches a certain value. */
+	  if (cycleEventQueue.eventCount != 0 && cycles >= cycleEventQueue.nextTime)
+		  cycleEventQueue.popFirst().execute(cycles);
+	  if (cycleEventQueue.eventCount > 0)
+		  nextEventCycles = (vTimeEventQueue.eventCount > 0)
+		  	  ? Math.min(convertVTime(vTimeEventQueue.nextTime), cycleEventQueue.nextTime)
+		  	  : cycleEventQueue.nextTime;
   }
   
   /**
-   * Schedules a new Time event using the cycles counter
+   * Schedules a TimeEvent to execute when the cycle counter reaches a certain
+   * value.
    * @param event
-   * @param time
+   * @param targetCycleCount The cycle count at which to execute <code>event</code> 
    */
-  public void scheduleCycleEvent(TimeEvent event, long cycles) {
-    long currentNext = cycleEventQueue.nextTime;
-    cycleEventQueue.addEvent(event, cycles);
-    if (currentNext != cycleEventQueue.nextTime) {
-      nextCycleEventCycles = cycleEventQueue.nextTime;
-      if (nextEventCycles > nextCycleEventCycles) {
-        nextEventCycles = nextCycleEventCycles;
+  public void scheduleCycleEvent(TimeEvent event, long targetCycleCount) {
+    System.err.println("scheduleCycleEvent(" + event + ", " + targetCycleCount + ")");
+    long prev = cycleEventQueue.nextTime; // previous head of queue
+    cycleEventQueue.addEvent(event, targetCycleCount);
+    if (prev != targetCycleCount)
+      nextEventCycles = Math.min(nextEventCycles, targetCycleCount);
       }
-    }
-  }
-
   
   /**
    * Schedules a new Time event using the virtual time clock
@@ -561,20 +576,16 @@ public class MSP430Core extends Chip implements MSP430Constants {
    * @param time
    */
   public void scheduleTimeEvent(TimeEvent event, long time) {
-    long currentNext = vTimeEventQueue.nextTime;
+	  System.err.println("scheduleTimeEvent(" + event + ", " + time + ")");
+	  long prev = vTimeEventQueue.nextTime;
     vTimeEventQueue.addEvent(event, time);
-    if (currentNext != vTimeEventQueue.nextTime) {
-      // This is only valid when not having a cycle event queue also...
-      // if we have it needs to be checked also!
-      nextVTimeEventCycles = convertVTime(vTimeEventQueue.nextTime);
-      if (nextEventCycles > nextVTimeEventCycles) {
-        nextEventCycles = nextVTimeEventCycles;
+	  if (prev != time) {
+		  long cy = convertVTime(time);
+		  if (cycles > cy) {
+			  logger.warning(this, "Cannot schedule event in the past");
+			  throw new IllegalStateException("Cannot schedule event in the past");
       }
-      /* Warn if someone schedules a time backwards in time... */
-      if (cycles > nextVTimeEventCycles) {
-        logger.warning(this, "Scheduling time event backwards in time!!!");
-        throw new IllegalStateException("Cycles are passed desired future time...");
-      }
+		  nextEventCycles = Math.min(nextEventCycles, cy);
     }
   }
   
@@ -593,9 +604,10 @@ public class MSP430Core extends Chip implements MSP430Constants {
 
   public void printEventQueues(PrintStream out) {
       out.println("Current cycles: " + cycles + "  virtual time:" + getTime());
-      out.println("Cycle event queue: (next time: " + nextCycleEventCycles + ")");
+      out.println("Cycle event queue: (next time: " + cycleEventQueue.nextTime + ")");
       cycleEventQueue.print(out);
-      out.println("Virtual time event queue: (next time: " + nextVTimeEventCycles + ")");
+      out.println("Virtual time event queue: (next time: " +
+    		  convertVTime(vTimeEventQueue.nextTime) + ")");
       vTimeEventQueue.print(out);
   }
  
@@ -616,14 +628,89 @@ public class MSP430Core extends Chip implements MSP430Constants {
     }
   }
   
+  public double getOffset() {
+	  return offset;
+  }
+
+  public long getWastedCycles () {
+	  CheckpointValidator cv =
+		  (CheckpointValidator) registry.getComponent("checkpointing");
+	  if (null == cv)
+		  return 0; // no waste if no checkpointing
+	  long cdiff = cycles - cv.getCyclesAtEndOfLastFullCheckpoint();
+	  return (cdiff > 0) ? cdiff : 0;
+  }
+  
+  public void die () {
+	  final long tmpCycles = cycles;
+	  boolean retryLifecycle = false;
+	  final long wasted = getWastedCycles();
+      System.err.println("cpu.die() at PC=" + Utils.hex16(getPC()) +
+              ", V=" + capacitor.getVoltage() + ", cycles=" + tmpCycles +
+              ", wasted=" + wasted);
+      GenericNode gn = (GenericNode)registry.getComponent("node");
+      try {
+    	  gn.reportDeath();
+      } catch (ShouldRetryLifecycleException srle) {
+    	  System.err.println(srle.getMessage());
+    	  retryLifecycle = true;
+    	  setOracleThreshold(getOracleThreshold() +
+    			  srle.getOracleVoltageAdjustment());
+    	  retryMemory = gn.getLastMemoryCapture().getMemory();
+      }
+      try { Thread.sleep(1000); } catch (Exception e) {}
+      
+      long mementosCycles = 0;
+      if (profiler != null) {
+  	    profiler.profileReturn(tmpCycles);
+  	    mementosCycles = profiler.getMementosCycles();
+      }
+
+      if (capacitor.eFairy != null) {
+          deadSource.setCurrentTime(getTimeMillis() + offset);
+          capacitor.setClockSource(deadSource);
+          int oldMode = capacitor.getPowerMode();
+          capacitor.setPowerMode(MODE_LPM4);
+          while(capacitor.getVoltage() < this.resurrectionThreshold) {
+              capacitor.updateVoltage(false);
+          }
+          capacitor.setPowerMode(oldMode);
+          offset = deadSource.getTimeMillis();
+          capacitor.setClockSource(this);
+      } else {
+          capacitor.reset();
+      }
+      lastCyclesTime = nextEventCycles = cycles = 0;
+      noMoreCheckpointsThisLifecycle = false;
+      reset(); // NOTE: doesn't do anything until next start or step
+      capacitor.setA(capacitor.getVoltage(), false); //Make sure that A is updated appropriately
+      
+      if (retryLifecycle) {
+    	  isRetry = true;
+      } else {
+    	  totalMementosCycles += mementosCycles;
+    	  System.err.println("totalMementosCycles = " + totalMementosCycles +
+    			  " + " + mementosCycles);
+    	  totalWastedCycles += wasted;
+    	  capacitor.incrementNumLifecycles(tmpCycles);
+    	  isRetry = false;
+      }
+  }
+  
   private void internalReset() {
     for (int i = 0, n = 64; i < n; i++) {
       interruptSource[i] = null;
     }
+    inCheckpoint = false;
+	CheckpointValidator cv = (CheckpointValidator) registry.getComponent("checkpointing");
+    if (cv != null) {
+        cv.reset();
+    }
     servicedInterruptUnit = null;
     servicedInterrupt = -1;
     interruptMax = -1;
-    writeRegister(SR, 0);
+    // writeRegister(SR, 0);
+    writeRegister(PC, 0xe000);
    
     cycleEventQueue.removeAll();
     vTimeEventQueue.removeAll();
@@ -635,9 +722,26 @@ public class MSP430Core extends Chip implements MSP430Constants {
     // Needs to be last since these can add events...
     resetIOUnits();
   
+    flash.reset(MSP430.RESET_POR);
+  
     if (profiler != null) {
         profiler.resetProfile();
+    	profiler.resetCallStackPointer();
     }
+    lastCyclesTime = nextEventCycles = cycles = 0;
+    if (isRetry) {
+    	System.arraycopy(retryMemory, 0, memory, 0, memory.length);
+    	System.err.println("Reset memory to its initial contents");
+    } else {
+        GenericNode gn = (GenericNode)registry.getComponent("node");
+        gn.captureMemory();
+    }
+	mainfn_addr = map.getFunctionAddress("main"); 
+
+    System.err.println("Finished internalReset()");
+    int activeBundle = cv.findActiveBundlePointer(memory);
+    System.err.println(activeBundle == 0xFFFF ? "No active checkpoint." :
+            ("Active checkpoint: " + Utils.hex16(activeBundle)));
   }
 
   public void setWarningMode(EmulationLogger.WarningMode mode) {
@@ -774,6 +878,7 @@ public class MSP430Core extends Chip implements MSP430Constants {
       }
       // check for Flash
     } else if (flash.addressInFlash(dstAddress)) {
+      log("About to write to flash at " + Utils.hex16(dstAddress));
       flash.flashWrite(dstAddress, dst & 0xffff, word);
       if (mode > MODE_WORD) {
           flash.flashWrite(dstAddress + 2, dst >> 16, word);
@@ -840,12 +945,6 @@ public class MSP430Core extends Chip implements MSP430Constants {
       profiler.profileInterrupt(interruptMax, cycles);
     }
         
-    if (flash.blocksCPU()) {
-      /* TODO: how should this error/warning be handled ?? */
-      throw new IllegalStateException(
-          "Got interrupt while flash controller blocks CPU. CPU CRASHED.");
-    }
-    
     // Only store stuff on irq except reset... - not sure if this is correct...
     // TODO: Check what to do if reset is called!
     if (interruptMax < MAX_INTERRUPT) {
@@ -873,6 +972,9 @@ public class MSP430Core extends Chip implements MSP430Constants {
     if (servicedInterrupt == MAX_INTERRUPT) {
         if (debugInterrupts) System.out.println("**** Servicing RESET! => $" + getAddressAsString(pc));
         internalReset();
+    } else if (servicedInterrupt == 6) {
+        System.err.println("**** Servicing a TimerA interrupt => " +
+                Utils.hex16(pc) + ", oldPC=" + Utils.hex16(previousPC));
     }
     
     
@@ -909,11 +1011,16 @@ public class MSP430Core extends Chip implements MSP430Constants {
     // Interrupt processing [after the last instruction was executed]
     // -------------------------------------------------------------------
     if (interruptsEnabled && servicedInterrupt == -1 && interruptMax >= 0) {
+		  System.err.println("Servicing interrupt: " + interruptMax);
+		  if (capacitor != null) {
+			  System.err.println("Capacitor voltage: " + capacitor.getVoltage());
+		  }
       pc = serviceInterrupt(pc);
     }
 
-    /* Did not execute any instructions */
+	  /* Don't execute any instructions; just update the cycle counter */
     if (cpuOff || flash.blocksCPU()) {
+      System.err.println("cpuOff || flash.blocksCPU()");
       //       System.out.println("Jumping: " + (nextIOTickCycles - cycles));
       // nextEventCycles must exist, otherwise CPU can not wake up!?
 
@@ -1182,6 +1289,17 @@ public class MSP430Core extends Chip implements MSP430Constants {
               updateStatus = false;
               break;
           case CALL:
+              /* Is this call a checkpoint?  If so, take a snapshot of the
+               * current state. */
+              CheckpointValidator cv = (CheckpointValidator) registry.getComponent("checkpointing");
+              if (dst == cv.getCPFunc()) {
+                System.err.println("Checkpoint function called");
+                cv.preCall(reg, memory, cycles);
+                cv.pushFunCall();
+              } else if (cv.isInChk()) {
+                cv.pushFunCall();
+              }
+
               // store current PC on stack. (current PC points to next instr.)
               pc = readRegister(PC);
               //	memory[sp] = pc & 0xff;
@@ -1416,7 +1534,24 @@ public class MSP430Core extends Chip implements MSP430Constants {
 	updateStatus = false;
 	
 	if (instruction == RETURN && profiler != null) {
-	    profiler.profileReturn(cpuCycles);
+				  profiler.profileReturn(cycles);
+			  }
+
+			  if (instruction == RETURN)
+			  {
+				  //returning from a checkpoint?.  If so, compare saved data to saved snapshot
+				  CheckpointValidator chv = (CheckpointValidator) registry.getComponent("checkpointing");
+				  //System.out.println("Checkpoint check!");
+				  if (chv.isInChk())
+				  {
+					  // System.err.println("heap start = "+map.heapStartAddress);
+					  if (chv.popFunCall() == 0) {
+						  System.err.println("Checkpoint function returned!");
+						  if (!chv.postCall(reg, memory, map.stackStartAddress, cycles)) {
+							  System.err.println("Bad checkpoint; stopping.");
+						  }
+					  }
+				  }	
 	}
 	
 	break;
@@ -1529,6 +1664,23 @@ public class MSP430Core extends Chip implements MSP430Constants {
         write = true;
         writeRegister(SR, sr);
         break;
+      case 0: // encountered if main() returns
+        long totalCycles = capacitor.accumCycleCount + cycles;
+        long memCycles = totalMementosCycles + // previous lifecycles
+          profiler.getMementosCycles();        // this lifecycle
+        throw new StopExecutionException(readRegister(15),
+            "Encountered opcode 0 after " +
+            totalCycles + " cycles " +
+            "in " + capacitor.getNumLifecycles() + " lifecycles; " +
+            "R15=" + Utils.hex16(readRegister(15)) +
+            "; PC=" + Utils.hex16(memory[readRegister(PC)]) +
+            "; prev PC=" + Utils.hex16(previousPC) +
+            "; SP=" + Utils.hex16(memory[readRegister(SP)]) +
+            "; wasted=" + totalWastedCycles +
+            " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
+            "; mementosCycles()=" + memCycles +
+            " (" + (100.0 * memCycles / totalCycles) + "%)"
+            );
       default:
 	logw("DoubleOperand not implemented: op = " + op + " at " + pc);
 	if (EXCEPTION_ON_BAD_OPERATION) {
@@ -1546,6 +1698,14 @@ public class MSP430Core extends Chip implements MSP430Constants {
     if (write) {
       if (dstRegMode) {
 	writeRegister(dstRegister, dst);
+
+			  /* treat 'BR &main' specially */
+			  if (dstRegister == PC && dst == mainfn_addr) {
+				  MapEntry mainfn = map.getEntry(mainfn_addr);
+				  if (null == mainfn)
+					  mainfn = getFunction(map, mainfn_addr);
+				  profiler.profileCall(mainfn, cycles);
+			  }
       } else {
 	dstAddress &= 0xffff;
 	write(dstAddress, dst, word ? MODE_WORD : MODE_BYTE);
@@ -1562,16 +1722,20 @@ public class MSP430Core extends Chip implements MSP430Constants {
       writeRegister(SR, sr);
     }
 
-    //System.out.println("CYCLES AFTER: " + cycles);
-
-    // -------------------------------------------------------------------
-    // Event processing (when CPU is awake)
-    // -------------------------------------------------------------------
-    while (cycles >= nextEventCycles) {
+	  while (cycles >= nextEventCycles)
       executeEvents();
-    }
     
     cpuCycles += cycles - startCycles;
+
+    if (capacitor.updateVoltage(inCheckpoint)) { // time to die
+      die();
+    } else if (!noMoreCheckpointsThisLifecycle) {
+      if (Math.abs(capacitor.getVoltage() - oracleThreshold) < oracleEpsilon) {
+        fakeCheckpoint();
+      }
+    }
+
+    previousPC = pc;
     
     /* return the address that was executed */
     return pcBefore;
@@ -1612,5 +1776,53 @@ public class MSP430Core extends Chip implements MSP430Constants {
                     + Utils.hex16(read(0xfffe - i * 2, MODE_WORD)) + "\n");
       }
       return buf.toString();
+  }
+
+  public String getReport() {
+    return "R15=" + readRegister(15) +
+      "; -8(SP)=" + memory[readRegister(SP)-8] +
+      "; -6(SP)=" + memory[readRegister(SP)-6] +
+      "; -4(SP)=" + memory[readRegister(SP)-4] +
+      "; -2(SP)=" + memory[readRegister(SP)-2];
+  }
+  public void printReport() { System.err.println(getReport()); }
+  
+  public void setOracleThreshold(double thresh) {
+    oracleThreshold = thresh;
+    System.err.println("Set oracle threshold to " + oracleThreshold);
+  }
+  
+  public double getOracleThreshold() {
+    return oracleThreshold;
+  }
+  
+  private void fakeCheckpoint() {
+    inCheckpoint = true;
+    System.err.println("Faking checkpoint");
+
+    /* Fake a call to the checkpoint function.  CALL semantics:
+     * SP = SP - 2
+     * @SP = PC + 2
+     * PC = jumpdest
+     */
+    int cploc = map.getFunctionAddress("__mementos_checkpoint");
+    if (cploc != -1) { 
+      CheckpointValidator cv = (CheckpointValidator) registry.getComponent("checkpointing");
+      cv.preCall(reg, memory, cycles);
+      cv.pushFunCall(true /* fake */);
+      int newsp = readRegister(SP) - 2;
+      int newpc = readRegister(PC); // emulateOP has already updated PC; no need to add 2
+      writeRegister(SP, newsp);
+      memory[newsp] = newpc & 0xff;
+      memory[newsp+1] = newpc >> 8;
+      writeRegister(PC, cploc);
+      if (null != profiler) {
+        MapEntry function = map.getEntry(cploc);
+        if (null == function)
+          function = getFunction(map, cploc);
+        profiler.profileCall(function, cycles);
+      }
+    }
+    noMoreCheckpointsThisLifecycle = true;
   }
 }
