@@ -1704,7 +1704,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
 				  MapEntry mainfn = map.getEntry(mainfn_addr);
 				  if (null == mainfn)
 					  mainfn = getFunction(map, mainfn_addr);
-				  profiler.profileCall(mainfn, cycles);
+				  profiler.profileCall(mainfn, cycles, pc);
 			  }
       } else {
 	dstAddress &= 0xffff;
@@ -1820,7 +1820,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
         MapEntry function = map.getEntry(cploc);
         if (null == function)
           function = getFunction(map, cploc);
-        profiler.profileCall(function, cycles);
+        profiler.profileCall(function, cycles, readRegister(PC));
       }
     }
     noMoreCheckpointsThisLifecycle = true;

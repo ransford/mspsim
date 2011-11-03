@@ -81,19 +81,20 @@ public class DebugCommands implements CommandBundle {
           int baddr;
           for (int i = 0; i < context.getArgumentCount(); ++i) {
             baddr = context.getArgumentAsAddress(i);
-          if (baddr < 0) {
-            context.err.println("unknown symbol: " + context.getArgument(0));
-            return 1;
+            if (baddr < 0) {
+              context.err.println("unknown symbol: " + context.getArgument(0));
+              return 1;
+            }
+            cpu.setBreakPoint(address = baddr,
+                new CPUMonitor() {
+                  public void cpuAction(int type, int adr, int data) {
+                    context.out.println("*** Break at $" + cpu.getAddressAsString(adr));
+                    cpu.stop();
+                  }
+            });
+            context.err.println("Breakpoint set at $" + cpu.getAddressAsString(baddr));
+            return 0;
           }
-          cpu.setBreakPoint(address = baddr,
-              new CPUMonitor() {
-                public void cpuAction(int type, int adr, int data) {
-                  context.out.println("*** Break at $" + cpu.getAddressAsString(adr));
-		  cpu.stop();
-                }
-          });
-          context.err.println("Breakpoint set at $" + cpu.getAddressAsString(baddr));
-          return 0;
         }
         public void stopCommand(CommandContext context) {
           cpu.clearBreakPoint(address);
@@ -201,8 +202,8 @@ public class DebugCommands implements CommandBundle {
                 	  if (type != MEMORY_WRITE) return;
                       if (mode == 0 || mode == 2) {
                           int pc = cpu.readRegister(0);
-                          String adrStr = getSymOrAddr(context, adr);
-                          String pcStr = getSymOrAddrELF(getELF(), pc);
+                          String adrStr = getSymOrAddr(cpu, context, adr);
+                          String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
                           context.out.println("*** write from " + pcStr +
                                   ": " + adrStr + " = " + data);
                           if (mode == 2) {
@@ -392,7 +393,7 @@ public class DebugCommands implements CommandBundle {
 
             for (int i = stackStart-2; i >= current ; i -= 2) {
               context.out.println(" 0x" + Utils.hex16(i) + " = " +
-                  Utils.hex16(cpu.read(i, i >= 0x100)));
+                  Utils.hex16(cpu.read(i, i >= 0x100, 0l)));
             }
             return 0;
           }

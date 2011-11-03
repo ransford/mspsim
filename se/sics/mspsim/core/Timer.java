@@ -243,7 +243,7 @@ public class Timer extends IOUnit {
                   expCaptureTime = cycles + (long) (diff * cyclesMultiplicator);
                   update();
                   return;
-              } */
+              }
               if (DEBUG) {
                   log((captureOn ? "CAPTURE: " : "COMPARE: ") + index +
                           " Cycles: " + cycles + " expCap: " + expCaptureTime +

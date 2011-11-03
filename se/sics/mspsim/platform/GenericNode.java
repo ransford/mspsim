@@ -66,6 +66,7 @@ import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.core.MSP430Config;
 import se.sics.mspsim.core.MSP430Constants;
 import se.sics.mspsim.core.MSP430Core;
+import se.sics.mspsim.core.StopExecutionException;
 import se.sics.mspsim.extutil.highlight.HighlightSourceViewer;
 import se.sics.mspsim.ui.ConsoleUI;
 import se.sics.mspsim.ui.ControlUI;
@@ -95,23 +96,13 @@ public abstract class GenericNode extends Chip implements Runnable {
   protected String firmwareFile = null;
   protected ELF elf;
   protected OperatingModeStatistics stats;
-	protected CheckpointValidator checkpointing = new CheckpointValidator(this);
+  protected CheckpointValidator checkpointing = new CheckpointValidator(this);
 
-	protected int expectedExitCode = -1;
-	protected Vector<MemoryContainer> memoryCaptures = new Vector<MemoryContainer>();
-	private long prevWasted = 10000000000L;
-	private double defaultAdjustmentMagnitude = 0.2; 
-	private double prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
-	public static final int defaultMspType = MSP430Core.MSP430F2132;
-
-	public GenericNode() {
-		cpu = new MSP430(defaultMspType, registry);
-	}
-	
-	public GenericNode(int mspType) {
-		cpu = new MSP430(mspType, registry);
-	}
-
+  protected int expectedExitCode = -1;
+  protected Vector<MemoryContainer> memoryCaptures = new Vector<MemoryContainer>();
+  private long prevWasted = 10000000000L;
+  private double defaultAdjustmentMagnitude = 0.2; 
+  private double prevAdjustmentMagnitude = defaultAdjustmentMagnitude;
 
   public GenericNode(String id, MSP430Config config) {
     super(id, new MSP430(0, new ComponentRegistry(), config));
