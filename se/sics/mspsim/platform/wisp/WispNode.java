@@ -42,6 +42,7 @@
 package se.sics.mspsim.platform.wisp;
 import java.io.IOException;
 
+import se.sics.mspsim.config.MSP430f2132Config;
 import se.sics.mspsim.core.ADC12;
 import se.sics.mspsim.core.ADCInput;
 import se.sics.mspsim.core.IOUnit;
@@ -59,11 +60,7 @@ public class WispNode extends GenericNode implements ADCInput {
   public static final int MODE_MAX = 0; // ?
 
   public WispNode () {
-      super();
-  }
-  
-  public WispNode (int type) {
-	  super(type);
+      super("WISP", new MSP430f2132Config());
   }
 
   public boolean getDebug () {
@@ -92,17 +89,11 @@ public class WispNode extends GenericNode implements ADCInput {
   public static void main (String[] args) throws IOException {
       ArgumentManager config = new ArgumentManager();
       config.handleArguments(args);
-      int type = defaultMspType;
       WispNode node;
 
-      boolean f1611 = config.getPropertyAsBoolean("msp430f1611", false);      
-      boolean f2132 = config.getPropertyAsBoolean("msp430f2132", false);      
-      if (f2132)
-          type = MSP430Core.MSP430F2132;
-      else if (f1611)
-          type = MSP430Core.MSP430F1611;
+      /* XXX figure out whether f2132 or f1611 or what */
 
-      node = new WispNode(type);
+      node = new WispNode();
       node.setupArgs(config);
   }
 

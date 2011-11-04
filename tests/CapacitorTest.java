@@ -1,5 +1,6 @@
 package tests;
 import edu.umass.energy.Capacitor;
+import se.sics.mspsim.config.MSP430f2132Config;
 import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.util.ComponentRegistry;
 
@@ -20,7 +21,8 @@ public class CapacitorTest extends Capacitor {
         }
     }
     public static void main (String[] args) {
-        MSP430 msp = new MSP430(0, new ComponentRegistry());
+        MSP430 msp = new MSP430(0, new ComponentRegistry(),
+            new MSP430f2132Config());
         CapacitorTest cap = new CapacitorTest(msp, 10e-6, 4.5, 3.0, 2.5);
         cap.runTest();
     }

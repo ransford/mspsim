@@ -93,8 +93,8 @@ public class DebugCommands implements CommandBundle {
                   }
             });
             context.err.println("Breakpoint set at $" + cpu.getAddressAsString(baddr));
-            return 0;
           }
+          return 0;
         }
         public void stopCommand(CommandContext context) {
           cpu.clearBreakPoint(address);
@@ -393,7 +393,7 @@ public class DebugCommands implements CommandBundle {
 
             for (int i = stackStart-2; i >= current ; i -= 2) {
               context.out.println(" 0x" + Utils.hex16(i) + " = " +
-                  Utils.hex16(cpu.read(i, i >= 0x100, 0l)));
+                  Utils.hex16(cpu.read(i, MSP430Constants.MODE_WORD)));
             }
             return 0;
           }
