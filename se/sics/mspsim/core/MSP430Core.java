@@ -45,7 +45,6 @@ import java.util.ArrayList;
 import java.lang.Math;
 
 import se.sics.mspsim.platform.GenericNode;
-import se.sics.mspsim.platform.MemoryContainer;
 import se.sics.mspsim.platform.ShouldRetryLifecycleException;
 import se.sics.mspsim.util.ComponentRegistry;
 import se.sics.mspsim.util.MapEntry;
@@ -54,7 +53,6 @@ import se.sics.mspsim.util.SimpleProfiler;
 import se.sics.mspsim.util.Utils;
 
 import edu.umass.energy.CapClockSource;
-import edu.umass.energy.Capacitor;
 import edu.umass.energy.DeadTimer;
 import se.sics.mspsim.util.CheckpointValidator;
 
