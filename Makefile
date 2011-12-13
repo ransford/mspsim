@@ -186,4 +186,5 @@ endif
 
 ### tags
 .tags:
-	etags --no-defines --language=java -o .tags **/*.java
+	find . -type f -name \*.java -print0 | \
+		xargs -0 etags --no-defines --language=java -o .tags **/*.java
