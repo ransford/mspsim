@@ -183,3 +183,7 @@ ifdef WINDIR
 else
 	-$(RM) $(foreach f,$(wildcard *.class),$(APO)$(f)$(APO)) $(foreach dir,$(PACKAGES),$(dir)/*.class)
 endif
+
+### tags
+.tags:
+	etags --no-defines --language=java -o .tags **/*.java
