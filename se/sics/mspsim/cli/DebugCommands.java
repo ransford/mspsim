@@ -27,16 +27,10 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
- *
- * CommandBundle
  *
  * Author  : Joakim Eriksson, Niclas Finne
  * Created : Mon Feb 11 2008
- * Updated : $Date$
- *           $Revision$
  */
 package se.sics.mspsim.cli;
 import java.io.IOException;
@@ -76,28 +70,27 @@ public class DebugCommands implements CommandBundle {
     if (cpu != null) {
       ch.registerCommand("break", new BasicAsyncCommand("add a breakpoint to a given address or symbol",
           "<address or symbol>") {
-        int address = 0;
+        private int address;
+        private CPUMonitor monitor;
         public int executeCommand(final CommandContext context) {
-          int baddr;
-          for (int i = 0; i < context.getArgumentCount(); ++i) {
-            baddr = context.getArgumentAsAddress(i);
-            if (baddr < 0) {
-              context.err.println("unknown symbol: " + context.getArgument(0));
-              return 1;
-            }
-            cpu.setBreakPoint(address = baddr,
-                new CPUMonitor() {
-                  public void cpuAction(int type, int adr, int data) {
-                    context.out.println("*** Break at $" + cpu.getAddressAsString(adr));
-                    cpu.stop();
-                  }
-            });
-            context.err.println("Breakpoint set at $" + cpu.getAddressAsString(baddr));
+          address = context.getArgumentAsAddress(0);
+          if (address < 0) {
+            context.err.println("unknown symbol: " + context.getArgument(0));
+            return 1;
           }
+          monitor = new CPUMonitor() {
+              public void cpuAction(int type, int adr, int data) {
+                  context.out.println("*** Break at $" + cpu.getAddressAsString(adr));
+                  cpu.stop();
+              }
+          };
+          cpu.addWatchPoint(address, monitor);
+          context.err.println("Breakpoint set at $" + cpu.getAddressAsString(address));
+          // XXX check context.getArgumentCount() and add more bkpts?
           return 0;
         }
         public void stopCommand(CommandContext context) {
-          cpu.clearBreakPoint(address);
+          cpu.removeWatchPoint(address, monitor);
         }
       });
 
@@ -106,9 +99,10 @@ public class DebugCommands implements CommandBundle {
         int mode = 0;
         int address = 0;
         int length = 1;
+        CPUMonitor monitor;
         public int executeCommand(final CommandContext context) {
-          int baddr = context.getArgumentAsAddress(0);
-          if (baddr == -1) {
+          address = context.getArgumentAsAddress(0);
+          if (address < 0) {
             context.err.println("unknown symbol: " + context.getArgument(0));
             return -1;
           }
@@ -126,7 +120,11 @@ public class DebugCommands implements CommandBundle {
                   }
               }
           }
-          CPUMonitor monitor = new CPUMonitor() {
+          if (length < 1) {
+              context.err.println("please specify a length of at least one byte");
+              return -1;
+          }
+          monitor = new CPUMonitor() {
               public void cpuAction(int type, int adr, int data) {
                   if (mode == 0 || mode == 10) {
                       int pc = cpu.readRegister(0);
@@ -156,19 +154,22 @@ public class DebugCommands implements CommandBundle {
               }
           };
 
-          cpu.setBreakPoint(address = baddr, monitor);
-          if (length > 1) {
-              for (int i = 1; i < length; i++) {
-                  cpu.setBreakPoint(address + i, monitor);
-            }
+          for (int i = 0; i < length; i++) {
+              cpu.addWatchPoint(address + i, monitor);
           }
-          context.err.println("Watch set at $" + cpu.getAddressAsString(baddr));
+          if (length > 1) {
+              context.err.println("Watch set at $" + cpu.getAddressAsString(address) + " - $" + cpu.getAddressAsString(address + length - 1));
+          } else {
+              context.err.println("Watch set at $" + cpu.getAddressAsString(address));
+          }
           return 0;
         }
 
         public void stopCommand(CommandContext context) {
-          cpu.clearBreakPoint(address);
-          context.exit(0);
+            for (int i = 0; i < length; i++) {
+                cpu.removeWatchPoint(address + i, monitor);
+            }
+            context.exit(0);
         }
       });
 
@@ -243,6 +244,7 @@ public class DebugCommands implements CommandBundle {
           new BasicAsyncCommand("add a write watch to a given register", "<register> [int]") {
         int mode = 0;
         int register = 0;
+        CPUMonitor monitor;
         public int executeCommand(final CommandContext context) {
           register = context.getArgumentAsRegister(0);
           if (register < 0) {
@@ -257,7 +259,7 @@ public class DebugCommands implements CommandBundle {
               return -1;
             }
           }
-          cpu.setRegisterWriteMonitor(register, new CPUMonitor() {
+          monitor = new CPUMonitor() {
             public void cpuAction(int type, int adr, int data) {
               if (mode == 0) {
                 int pc = cpu.readRegister(0);
@@ -269,43 +271,52 @@ public class DebugCommands implements CommandBundle {
                 context.err.println(data);
               }
             }
-          });
+          };
+          cpu.addRegisterWriteMonitor(register, monitor);
           context.err.println("Watch set for register " + getRegisterName(register));
           return 0;
         }
 
         public void stopCommand(CommandContext context) {
-          cpu.clearBreakPoint(register);
+          cpu.removeRegisterWriteMonitor(register, monitor);
         }
       });
 
-      ch.registerCommand("clear", new BasicCommand("clear a breakpoint or watch from a given address or symbol", "<address or symbol>") {
-        public int executeCommand(final CommandContext context) {
-          int baddr = context.getArgumentAsAddress(0);
-          cpu.setBreakPoint(baddr, null);
-          return 0;
-        }
-      });
+//      ch.registerCommand("clear", new BasicCommand("clear a breakpoint or watch from a given address or symbol", "<address or symbol>") {
+//        public int executeCommand(final CommandContext context) {
+//          int baddr = context.getArgumentAsAddress(0);
+//          cpu.setBreakPoint(baddr, null);
+//          return 0;
+//        }
+//      });
 
       ch.registerCommand("symbol", new BasicCommand("list matching symbols", "<regexp>") {
         public int executeCommand(final CommandContext context) {
           String regExp = context.getArgument(0);
           MapEntry[] entries = context.getMapTable().getEntries(regExp);
-          boolean found = false;
-          for (int i = 0; i < entries.length; i++) {
-            MapEntry mapEntry = entries[i];
-            int address = mapEntry.getAddress();
-            context.out.println(" " + mapEntry.getName() + " at $" +
-                  cpu.getAddressAsString(address) + " (" + Utils.hex8(cpu.memory[address]) +
-                  " " + Utils.hex8(cpu.memory[address + 1]) + ") " + mapEntry.getType() +
-                  " in file " + mapEntry.getFile());
-            found = true;
-          }
-          if (!found) {
-            context.err.println("Could not find any symbols matching '" + regExp + '\'');
+          if (entries.length == 0) {
+              context.err.println("Could not find any symbols matching '" + regExp + '\'');
+          } else {
+              for (MapEntry mapEntry : entries) {
+                  int address = mapEntry.getAddress();
+                  context.out.println(" " + mapEntry.getName() + " at $" +
+                          cpu.getAddressAsString(address) + " (" + Utils.hex8(cpu.memory[address]) +
+                          " " + Utils.hex8(cpu.memory[address + 1]) + ") " + mapEntry.getType() +
+                          " in file " + mapEntry.getFile());
+              }
           }
           return 0;
         }
+      });
+
+      ch.registerCommand("debug", new BasicCommand("set debug to on or off", "[0/1]") {
+          public int executeCommand(final CommandContext context) {
+              if (context.getArgumentCount() > 0) {
+                  cpu.setDebug(context.getArgumentAsBoolean(0));
+              }
+              context.out.println("Debug is set to " + cpu.getDebug());
+              return 0;
+          }
       });
 
       ch.registerCommand("line", new BasicCommand("print line number of address/symbol", "<address or symbol>") {
@@ -416,7 +427,7 @@ public class DebugCommands implements CommandBundle {
         ch.registerCommand("print", new BasicCommand("print value of an address or symbol", "<address or symbol>") {
           public int executeCommand(CommandContext context) {
             int adr = context.getArgumentAsAddress(0);
-            if (adr != -1) {
+            if (adr >= 0) {
               try {
                 context.out.println(context.getArgument(0) + " = $" + Utils.hex16(cpu.read(adr, adr >= 0x100 ? MSP430Constants.MODE_WORD : MSP430Constants.MODE_BYTE)));
               } catch (Exception e) {
@@ -513,7 +524,7 @@ public class DebugCommands implements CommandBundle {
                     if ((fkn = dbg.getFunction()) != null) {
                         context.out.println("//// " + fkn);
                     }
-                    context.out.println(dbg.getASMLine());
+                    context.out.println(dbg.getASMLine(false));
                     start += dbg.getSize();
                 } else {
                     int data = 0;
@@ -871,7 +882,7 @@ public class DebugCommands implements CommandBundle {
                 cpu.printEventQueues(context.out);
               return 0;
             }
-          });        
+          });
       }
     }
   }

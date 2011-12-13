@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * MSP430Core
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
@@ -78,14 +74,12 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   // 16 registers of which some are "special" - PC, SP, etc.
   public int[] reg = new int[16];
 
-  public CPUMonitor globalMonitor;
+  private CPUMonitor globalMonitor;
   
-  public CPUMonitor[] regWriteMonitors = new CPUMonitor[16];
-  public CPUMonitor[] regReadMonitors = new CPUMonitor[16];
-  
-  // For breakpoints, etc... how should memory monitors be implemented?
-  // Maybe monitors should have a "next" pointer...? or just have a [][]?
-  public CPUMonitor[] breakPoints;
+  private final CPUMonitor[] regWriteMonitors = new CPUMonitor[16];
+  private final CPUMonitor[] regReadMonitors = new CPUMonitor[16];
+
+  private CPUMonitor[] watchPoints;
   // true => breakpoints can occur!
   boolean breakpointActive = true;
 
@@ -141,7 +135,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   private EventQueue vTimeEventQueue = new EventQueue();
   private EventQueue cycleEventQueue = new EventQueue();
   
-  private BasicClockModule bcs;
   private ArrayList<Chip> chips = new ArrayList<Chip>();
 
   public ComponentRegistry registry;
@@ -199,7 +192,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     deadSource = new DeadTimer(0.0);
 
     memory = new int[MAX_MEM];
-    breakPoints = new CPUMonitor[MAX_MEM];
+    watchPoints = new CPUMonitor[MAX_MEM];
 
     System.out.println("Set up MSP430 Core with " + MAX_MEM + " bytes memory");
     
@@ -208,10 +201,10 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
         public void interruptServiced(int vector) {
         }
         public void write(int address, int value, boolean word, long cycles) {
-            logw("*** IOUnit write to non-existent IO at " + address);
+            logw("*** IOUnit write to non-existent IO at $" + Utils.hex16(address));
         }
         public int read(int address, boolean word, long cycles) {
-            logw("*** IOUnit read from non-existent IO at " + address);
+            logw("*** IOUnit read from non-existent IO at $" + Utils.hex16(address));
             return 0;
         }
     };
@@ -233,53 +226,42 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     // Maybe for debugging purposes...
     ioUnits = new ArrayList<IOUnit>();
 
-    // first step towards making core configurable
-    Timer ta = new Timer(this, memory, config.timerConfig[0]);
-    Timer tb = new Timer(this, memory, config.timerConfig[1]);
-    for (int i = 0, n = 0x20; i < n; i++) {
-      memOut[config.timerConfig[0].offset + i] = ta;
-      memIn[config.timerConfig[0].offset + i] = ta;
-      memOut[config.timerConfig[1].offset + i] = tb;
-      memIn[config.timerConfig[1].offset + i] = tb;
-    }
-    
-    /* TODO: this range is only valid for the F1611 series (Sky, etc) */
     flash = new Flash(this, memory,
-            new FlashRange(config.mainFlashStart, config.mainFlashStart + config.mainFlashSize, 512, 64),
-            new FlashRange(config.infoMemStart, config.infoMemStart + config.infoMemSize, 128, 64),
-            0x128);
+        new FlashRange(config.mainFlashStart, config.mainFlashStart + config.mainFlashSize, 512, 64),
+        new FlashRange(config.infoMemStart, config.infoMemStart + config.infoMemSize, 128, 64),
+        config.flashControllerOffset);
     for (int i = 0; i < 8; i++) {
-        memOut[i + 0x128] = flash;
-        memIn[i + 0x128] = flash;
+      memOut[i + config.flashControllerOffset] = flash;
+      memIn[i + config.flashControllerOffset] = flash;
     }
-    
+ 
+    /* Setup special function registers */
     sfr = new SFR(this, memory);
     for (int i = 0, n = 0x10; i < n; i++) {
-      memOut[i] = sfr;
-      memIn[i] = sfr;
+      memOut[i + config.sfrOffset] = sfr;
+      memIn[i + config.sfrOffset] = sfr;
     }
-    watchdog = new Watchdog(this);
-    memOut[0x120] = watchdog;
-    memIn[0x120] = watchdog;
 
-    memIn[Timer.TAIV] = ta;
-    memOut[Timer.TAIV] = ta;
-    memIn[Timer.TBIV] = tb;
-    memOut[Timer.TBIV] = tb;
+    // first step towards making core configurable
+    Timer[] timers = new Timer[config.timerConfig.length];
+    
+    for (int i = 0; i < config.timerConfig.length; i++) {
+        Timer t = new Timer(this, memory, config.timerConfig[i]);
+        for (int a = 0, n = 0x20; a < n; a++) {
+            memOut[config.timerConfig[i].offset + a] = t;
+            memIn[config.timerConfig[i].offset + a] = t;
+        }
+        memIn[config.timerConfig[i].timerIVAddr] = t;
+        memOut[config.timerConfig[i].timerIVAddr] = t;
+        
+        timers[i] = t;
+    }
 
-    bcs = new BasicClockModule(this, memory, 0, new Timer[] {ta, tb});
+    BasicClockModule bcs = new BasicClockModule(this, memory, 0, timers);
     for (int i = 0x56, n = 0x59; i < n; i++) {
       memOut[i] = bcs;
       memIn[i] = bcs;
     }
-
-    Multiplier mp = new Multiplier(this, memory, 0);
-    // Only cares of writes!
-    for (int i = 0x130, n = 0x13f; i < n; i++) {
-      memOut[i] = mp;
-      memIn[i] = mp;
-    }
-
     
     
     // SFR and Basic clock system.
@@ -287,28 +269,17 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     ioUnits.add(bcs);
 
     config.setup(this, ioUnits);
-    
-    // Add the timers
-    ioUnits.add(ta);
-    ioUnits.add(tb);
 
-    ADC12 adc12 = new ADC12(this);
-    ioUnits.add(adc12);
+    /* timers after ports ? */
+    for (int i = 0; i < timers.length; i++) {
+        ioUnits.add(timers[i]);
+    }
+
+    watchdog = new Watchdog(this);
+    memOut[config.watchdogOffset] = watchdog;
+    memIn[config.watchdogOffset] = watchdog;
 
     ioUnits.add(watchdog);
-    
-    for (int i = 0, n = 16; i < n; i++) {
-      memOut[0x80 + i] = adc12;
-      memIn[0x80 + i] = adc12;
-      memOut[0x140 + i] = adc12;
-      memIn[0x140 + i] = adc12;
-      memOut[0x150 + i] = adc12;
-      memIn[0x150 + i] = adc12;
-    }
-    for (int i = 0, n = 8; i < n; i++) {    
-      memOut[0x1A0 + i] = adc12;
-      memIn[0x1A0 + i] = adc12;
-    }
   }
 
   public Profiler getProfiler() {
@@ -321,6 +292,15 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     profiler.setCPU(this);
   }
 
+  public synchronized void addGlobalMonitor(CPUMonitor mon) {
+      globalMonitor = CPUMonitorProxy.addCPUMonitor(globalMonitor, mon);
+  }
+
+  public synchronized void removeGlobalMonitor(CPUMonitor mon) {
+      globalMonitor = CPUMonitorProxy.removeCPUMonitor(globalMonitor, mon);
+  }
+
+  @Deprecated
   public void setGlobalMonitor(CPUMonitor mon) {
       globalMonitor = mon;
   }
@@ -329,14 +309,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     return registry;
   }
 
-  /* returns port 1 ... 6 */
-  public IOPort getIOPort(int portID) {
-    if (portID > 0 && portID < 7) {
-     return (IOPort) ioUnits.get(portID - 1);
-    }
-    return null;
-  }
-  
   public SFR getSFR() {
     return sfr;
   }
@@ -386,25 +358,70 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   public Chip[] getChips() {
     return chips.toArray(new Chip[chips.size()]);
   }
-  
+
+  public boolean hasWatchPoint(int address) {
+      return watchPoints[address] != null;
+  }
+
+  public synchronized void addWatchPoint(int address, CPUMonitor mon) {
+      watchPoints[address] = CPUMonitorProxy.addCPUMonitor(watchPoints[address], mon);
+  }
+
+  public synchronized void removeWatchPoint(int address, CPUMonitor mon) {
+      watchPoints[address] = CPUMonitorProxy.removeCPUMonitor(watchPoints[address], mon);
+  }
+
+  @Deprecated
   public void setBreakPoint(int address, CPUMonitor mon) {
-    breakPoints[address] = mon;
+      if (mon != null) {
+          addWatchPoint(address, mon);
+      } else {
+          clearBreakPoint(address);
+      }
   }
 
+  @Deprecated
   public boolean hasBreakPoint(int address) {
-    return breakPoints[address] != null;
-  }
-  
-  public void clearBreakPoint(int address) {
-    breakPoints[address] = null;
+    return watchPoints[address] != null;
   }
 
-  public void setRegisterWriteMonitor(int r, CPUMonitor mon) {
-    regWriteMonitors[r] = mon;
+  @Deprecated
+  public synchronized void clearBreakPoint(int address) {
+      watchPoints[address] = null;
   }
 
-  public void setRegisterReadMonitor(int r, CPUMonitor mon) {
-    regReadMonitors[r] = mon;
+  public synchronized void addRegisterWriteMonitor(int r, CPUMonitor mon) {
+      regWriteMonitors[r] = CPUMonitorProxy.addCPUMonitor(regWriteMonitors[r], mon);
+  }
+
+  public synchronized void removeRegisterWriteMonitor(int r, CPUMonitor mon) {
+      regWriteMonitors[r] = CPUMonitorProxy.removeCPUMonitor(regWriteMonitors[r], mon);
+  }
+
+  public synchronized void addRegisterReadMonitor(int r, CPUMonitor mon) {
+      regReadMonitors[r] = CPUMonitorProxy.addCPUMonitor(regReadMonitors[r], mon);
+  }
+
+  public synchronized void removeRegisterReadMonitor(int r, CPUMonitor mon) {
+      regReadMonitors[r] = CPUMonitorProxy.removeCPUMonitor(regReadMonitors[r], mon);
+  }
+
+  @Deprecated
+  public synchronized void setRegisterWriteMonitor(int r, CPUMonitor mon) {
+      if (mon != null) {
+          regWriteMonitors[r] = CPUMonitorProxy.addCPUMonitor(regWriteMonitors[r], mon);
+      } else {
+          regWriteMonitors[r] = null;
+      }
+  }
+
+  @Deprecated
+  public synchronized void setRegisterReadMonitor(int r, CPUMonitor mon) {
+      if (mon != null) {
+          regReadMonitors[r] = CPUMonitorProxy.addCPUMonitor(regReadMonitors[r], mon);
+      } else {
+          regReadMonitors[r] = null;
+      }
   }
 
   public int[] getMemory() {
@@ -414,18 +431,23 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   public void writeRegister(int r, int value) {
 	int oldval = reg[r];
     // Before the write!
-    if (regWriteMonitors[r] != null) {
-      regWriteMonitors[r].cpuAction(CPUMonitor.REGISTER_WRITE, r, value);
+    CPUMonitor rwm = regWriteMonitors[r];
+    if (rwm != null) {
+      rwm.cpuAction(CPUMonitor.REGISTER_WRITE, r, value);
     }
     reg[r] = value;
     if (r == SR) { //If writing to the status register
       boolean oldCpuOff = cpuOff;
-//      if (((value & GIE) == GIE) != interruptsEnabled) {
-//        System.out.println("InterruptEnabled changed: " + !interruptsEnabled);
-//      }
+      if (debugInterrupts) {
+          if (((value & GIE) == GIE) != interruptsEnabled) {
+              System.out.println("InterruptEnabled changed: " + !interruptsEnabled);
+          }
+      }
       boolean oldIE = interruptsEnabled;
       interruptsEnabled = ((value & GIE) == GIE);
 
+//      if (debugInterrupts) System.out.println("Wrote to InterruptEnabled: " + interruptsEnabled + " was: " + oldIE);
+      
       if (oldIE == false && interruptsEnabled && servicedInterrupt >= 0) {
 //          System.out.println("*** Interrupts enabled while in interrupt : " +
 //                  servicedInterrupt + " PC: $" + getAddressAsString(reg[PC]));
@@ -459,8 +481,9 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   }
 
   public int readRegister(int r) {
-    if (regReadMonitors[r] != null) {
-      regReadMonitors[r].cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
+    CPUMonitor rrm = regReadMonitors[r];
+    if (rrm != null) {
+      rrm.cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
     }
     return reg[r];
   }
@@ -471,19 +494,21 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       // No monitoring here... just return the CG values
       return CREG_VALUES[r - 2][m];
     }
-    if (regReadMonitors[r] != null) {
-      regReadMonitors[r].cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
+    CPUMonitor rrm = regReadMonitors[r];
+    if (rrm != null) {
+      rrm.cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
     }
     return reg[r];
   }
 
   public int incRegister(int r, int value) {
-    if (regReadMonitors[r] != null) {
-      regReadMonitors[r].cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
+    CPUMonitor rm = regReadMonitors[r];
+    if (rm != null) {
+      rm.cpuAction(CPUMonitor.REGISTER_READ, r, reg[r]);
     }
-    if (regWriteMonitors[r] != null) {
-      regWriteMonitors[r].cpuAction(CPUMonitor.REGISTER_WRITE, r,
-				    reg[r] + value);
+    rm = regWriteMonitors[r];
+    if (rm != null) {
+      rm.cpuAction(CPUMonitor.REGISTER_WRITE, r, reg[r] + value);
     }
     reg[r] += value;
     return reg[r];
@@ -696,7 +721,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   }
   
   private void internalReset() {
-    for (int i = 0, n = 64; i < n; i++) {
+    for (int i = 0, n = interruptSource.length; i < n; i++) {
       interruptSource[i] = null;
     }
     inCheckpoint = false;
@@ -713,7 +738,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     cycleEventQueue.removeAll();
     vTimeEventQueue.removeAll();
 
-    bcs.reset(0);
     for (Chip chip : chips) {
       chip.notifyReset();
     }
@@ -770,10 +794,10 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       // MAX priority is executed first - update max if this is higher!
       if (interrupt > interruptMax) {
 	interruptMax = interrupt;
-	if (interruptMax == MAX_INTERRUPT) {
-	  // This can not be masked at all!
-	  interruptsEnabled = true;
-	}
+      }
+      if (interruptMax == MAX_INTERRUPT) {
+          // This can not be masked at all!
+          interruptsEnabled = true;
       }
     } else {
       if (interruptSource[interrupt] == source) {
@@ -844,64 +868,75 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
               }
           }
       }
-      if (breakPoints[address] != null) {
-          breakPoints[address].cpuAction(CPUMonitor.MEMORY_READ, address, val);
+      CPUMonitor wp = watchPoints[address];
+      if (wp != null) {
+          wp.cpuAction(CPUMonitor.MEMORY_READ, address, val);
       }
       /* is a null check as fast as a boolean check ?*/
-      if (globalMonitor != null) {
-          globalMonitor.cpuAction(CPUMonitor.MEMORY_READ, address, val);
+      wp = globalMonitor;
+      if (wp != null) {
+          wp.cpuAction(CPUMonitor.MEMORY_READ, address, val);
       }
       return val;
   }
   
   public void write(int dstAddress, int dst, int mode) throws EmulationException {
     // TODO: optimize memory usage by tagging memory's higher bits.
-    // will also affect below flash write stuff!!!
+      // will also affect below flash write stuff!!!
       if (dstAddress > MAX_MEM) {
           printWarning(ADDRESS_OUT_OF_BOUNDS_WRITE, dstAddress);
           dstAddress %= MAX_MEM;
       }
-      
-      if (breakPoints[dstAddress] != null) {
-      breakPoints[dstAddress].cpuAction(CPUMonitor.MEMORY_WRITE, dstAddress, dst);
-    }
-    boolean word = mode != MODE_BYTE;
 
-    // Only word writes at 0x1fe which is highest address...
-    if (dstAddress < MAX_MEM_IO) {
-      if (!word) dst &= 0xff;
-      memOut[dstAddress].write(dstAddress, dst & 0xffff, mode != MODE_BYTE, cycles);  
-      if (mode > MODE_WORD) {
-          memOut[dstAddress].write(dstAddress + 2, dst >> 16, mode != MODE_BYTE, cycles);
+      CPUMonitor wp = watchPoints[dstAddress]; 
+      if (wp != null) {
+          wp.cpuAction(CPUMonitor.MEMORY_WRITE, dstAddress, dst);
       }
-      // check for Flash
-    } else if (flash.addressInFlash(dstAddress)) {
-      log("About to write to flash at " + Utils.hex16(dstAddress));
-      flash.flashWrite(dstAddress, dst & 0xffff, word);
-      if (mode > MODE_WORD) {
-          flash.flashWrite(dstAddress + 2, dst >> 16, word);
+      boolean word = mode != MODE_BYTE;
+
+      // Only word writes at 0x1fe which is highest address...
+      if (dstAddress < MAX_MEM_IO) {
+          if (!word) dst &= 0xff;
+          memOut[dstAddress].write(dstAddress, dst & 0xffff, mode != MODE_BYTE, cycles);
+          if (mode > MODE_WORD) {
+              memOut[dstAddress].write(dstAddress + 2, dst >> 16, mode != MODE_BYTE, cycles);
+          }
+          // check for Flash
+      } else if (flash.addressInFlash(dstAddress)) {
+          flash.flashWrite(dstAddress, dst & 0xffff, word);
+          if (mode > MODE_WORD) {
+              flash.flashWrite(dstAddress + 2, dst >> 16, word);
+          }
+      } else {
+          // assume RAM
+          memory[dstAddress] = dst & 0xff;
+          if (word) {
+              memory[dstAddress + 1] = (dst >> 8) & 0xff;
+              if ((dstAddress & 1) != 0) {
+                  printWarning(MISALIGNED_WRITE, dstAddress);
+              }
+              if (mode > MODE_WORD) {
+                  memory[dstAddress + 2] = (dst >> 16) & 0xff; /* should be 0x0f ?? */
+                  memory[dstAddress + 3] = (dst >> 24) & 0xff; /* will be only zeroes*/
+              }
+          }
       }
-    } else {
-      // assume RAM
-      memory[dstAddress] = dst & 0xff;
-      if (word) {
-        memory[dstAddress + 1] = (dst >> 8) & 0xff;
-        if ((dstAddress & 1) != 0) {
-          printWarning(MISALIGNED_WRITE, dstAddress);
-        }
-        if (mode > MODE_WORD) {
-            memory[dstAddress + 2] = (dst >> 16) & 0xff; /* should be 0x0f ?? */
-            memory[dstAddress + 3] = (dst >> 24) & 0xff; /* will be only zeroes*/
-        }
+      /* is a null check as fast as a boolean check */
+      wp = globalMonitor;
+      if (wp != null) {
+          wp.cpuAction(CPUMonitor.MEMORY_WRITE, dstAddress, dst);
       }
-    }
-    /* is a null check as fast as a boolean check */
-    if (globalMonitor != null) {
-        globalMonitor.cpuAction(CPUMonitor.MEMORY_WRITE, dstAddress, dst);
-    }
 
   }
 
+  void profileCall(int dst, int pc) {
+      MapEntry function = map.getEntry(dst);
+      if (function == null) {
+          function = getFunction(map, dst);
+      }
+      profiler.profileCall(function, cpuCycles, pc);
+  }
+  
   void printWarning(int type, int address) throws EmulationException {
     String message = null;
     switch(type) {
@@ -938,7 +973,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     int spBefore = readRegister(SP);
     int sp = spBefore;
     int sr = readRegister(SR);
-
+    
     if (profiler != null) {
       profiler.profileInterrupt(interruptMax, cycles);
     }
@@ -1003,7 +1038,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     //System.out.println("CYCLES BEFORE: " + cycles);
     int pc = readRegister(PC);
     long startCycles = cycles;
-
     
     // -------------------------------------------------------------------
     // Interrupt processing [after the last instruction was executed]
@@ -1048,34 +1082,42 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
 
     // This is quite costly... should probably be made more
     // efficiently
-    if (breakPoints[pc] != null) {
+    CPUMonitor wp = watchPoints[pc];
+    if (wp != null) {
       if (breakpointActive) {
-	breakPoints[pc].cpuAction(CPUMonitor.EXECUTE, pc, 0);
+	wp.cpuAction(CPUMonitor.EXECUTE, pc, 0);
 	breakpointActive = false;
 	return -1;
       }
       // Execute this instruction - this is second call...
       breakpointActive = true;
     }
-    if (globalMonitor != null) {
-        globalMonitor.cpuAction(CPUMonitor.EXECUTE, pc, 0);
+    wp = globalMonitor;
+    if (wp != null) {
+        wp.cpuAction(CPUMonitor.EXECUTE, pc, 0);
     }
 
     int pcBefore = pc;
     instruction = read(pc, MODE_WORD);
-    
+    int ext3_0 = 0;
     /* check for extension words */
-    if ((instruction & 0xff00) == 0x1800) {
-        System.out.println("*** Extension word!!! - read the instruction too...");
+    if ((instruction & 0xf800) == 0x1800) {
         extWord = instruction;
+        ext3_0 = instruction & 0xf; /* bit 3 - 0 - either repeat count or dest 19-16 */
         pc += 2;
         instruction = read(pc, MODE_WORD);
+//        System.out.println("*** Extension word!!! " + Utils.hex16(extWord) +
+//                "  read the instruction too: " + Utils.hex16(instruction) + " at " + Utils.hex16(pc - 2));
+    } else {
+        extWord = 0;
     }
     
     op = instruction >> 12;
     int sp = 0;
     int sr = 0;
     int rval = 0; /* register value */
+    int repeats = 1; /* msp430X can repeat some instructions in some cases */
+    boolean zeroCarry = false; /* msp430X can zero carry in repeats */
     boolean word = (instruction & 0x40) == 0;
 
     // Destination vars
@@ -1095,27 +1137,127 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     case 0:
         // MSP430X - additional instructions
         op = instruction & 0xf0f0;
-        System.out.println("Executing MSP430X instruction op:" + Utils.hex16(op) +
-                " ins:" + Utils.hex16(instruction) + " PC = $" + getAddressAsString(pc - 2));
+//        System.out.println("Executing MSP430X instruction op:" + Utils.hex16(op) +
+//                " ins:" + Utils.hex16(instruction) + " PC = $" + getAddressAsString(pc - 2));
         int src = 0;
         /* data is either bit 19-16 or src register */
         int srcData = (instruction & 0x0f00) >> 8;
         int dstData = (instruction & 0x000f);
+        boolean rrword = true;
         switch(op) {
         // 20 bit register write
         case MOVA_IMM2REG:
             src = read(pc, MODE_WORD);
             writeRegister(PC, pc += 2);
             dst = src + (srcData << 16);
-            System.out.println("*** Writing $" + getAddressAsString(dst) + " to reg: " + dstData);
+//            System.out.println("*** Writing $" + getAddressAsString(dst) + " to reg: " + dstData);
+            writeRegister(dstData, dst);
+            updateStatus = false;
+            break;
+        case MOVA_ABS2REG:
+            src = read(pc, MODE_WORD);
+            writeRegister(PC, pc += 2);
+            dst = src + (srcData << 16);
+            //System.out.println(Utils.hex20(pc) + " MOVA &ABS Reading from $" + getAddressAsString(dst) + " to reg: " + dstData);
+            dst = read(dst, MODE_WORD20);
+            //System.out.println("   => $" + getAddressAsString(dst));
+            writeRegister(dstData, dst);
+            updateStatus = false;
+            break;
+        case MOVA_IND_AUTOINC:
+            if (profiler != null && instruction == 0x0110) {
+                profiler.profileReturn(cpuCycles);
+            }
+            writeRegister(PC, pc);
+            /* read from address in register */
+            src = readRegister(srcData);
+//            System.out.println("Reading $" + getAddressAsString(src) +
+//                    " from register: " + srcData);
+            dst = read(src, MODE_WORD20);
+//            System.out.println("Reading from mem: $" + getAddressAsString(dst));
+            writeRegister(srcData, src + 4);
+//            System.out.println("*** Writing $" + getAddressAsString(dst) + " to reg: " + dstData);
+            writeRegister(dstData, dst);
+            updateStatus = false;
+            break;
+//        case CMPA_IMM:
+//            break;
+//        case CMPA_REG:
+//            break;
+//      case ADDA_IMM - TODO - make both ADDA use the same code.
+        case ADDA_REG:
+            src = readRegister(srcData);
+            dst = readRegister(dstData);
+            
+            int tmp = (src ^ dst) & 0x80000;
+            
+            dst = src + dst;
+            int nxtCarry = (dst & 0x100000) > 0 ? CARRY : 0; /* bit 20 */
+            dst &= 0xfffff;
+                        
+            writeRegister(dstData, dst);
+            sr = readRegister(SR);
+            sr = sr & ~(NEGATIVE | OVERFLOW | CARRY | ZERO);
+            
+            // If tmp == 0 and currenly not the same sign for src & dst
+            if (tmp == 0 && ((src ^ dst) & 0x80000) != 0) {
+                sr |= OVERFLOW;
+                //        System.out.println("OVERFLOW - ADD/SUB " + Utils.hex16(src)
+                //                           + " + " + Utils.hex16(tmpDst));
+            }
+            
+            sr = sr | nxtCarry | (dst == 0 ? ZERO : 0) | ((dst & 0x80000) > 0 ? NEGATIVE : 0);
+            writeRegister(SR, sr);
+            updateStatus = false;
+            break;
+        case RRXX_ADDR:
+            rrword = false;
+        case RRXX_WORD:
+            int count = 1 + (instruction >> 10)& 0x03;
+            dst = readRegister(dstData);
+            nxtCarry = 0;
+            if (rrword) {
+                dst = dst & 0xffff;
+            }
+            switch(instruction & RRMASK) {
+            /* if word zero anything above */
+            case RRCM:
+                System.out.println("*** RRCM!!! not implemented");
+                throw new EmulationException("**** RRCM!! not implemented");
+//                break;
+            case RRAM:
+//                System.out.println("RRAM executing");
+                /* roll in MSB from above */
+                /* 1 11 111 1111 needs to get in if MSB is 1 */
+                if ((dst & (rrword ? 0x8000 : 0x80000)) > 0) {
+                    /* add some 1 bits above MSB if MSB is 1 */
+                    dst = dst | (rrword ? 0xf8000 : 0xf80000);
+                }
+                dst = dst >> (count - 1);
+                nxtCarry = (dst & 1) > 0 ? CARRY : 0;
+                dst = dst >> 1;
+                break;
+            case RLAM:
+                /* just roll in "zeroes" from left */
+                dst = dst << (count - 1);
+                nxtCarry = (dst & (rrword ? 0x8000 : 0x80000)) > 0 ? CARRY : 0;
+                dst = dst << 1;
+                break;
+            case RRUM:
+                /* just roll in "zeroes" from right */
+                dst = dst >> (count - 1);
+                nxtCarry = (dst & 1) > 0 ? CARRY : 0;
+                dst = dst >> 1;
+                break;
+            }
+            /* clear overflow - set carry according to above OP */
+            writeRegister(SR, (readRegister(SR) & ~(CARRY | OVERFLOW)) | nxtCarry);
+            dst = dst & (rrword ? 0xffff : 0xfffff);
             writeRegister(dstData, dst);
             break;
-        case CMPA_IMM:
-            break;
-        case CMPA_REG:
-            break;
         default:
-            System.out.println("MSP430X instructions not yet supported...");
+            System.out.println("MSP430X instructions not yet supported: " +
+                    Utils.hex16(instruction));
             throw new EmulationException("MSP430X instructions not yet supported...");
         }
         
@@ -1132,15 +1274,74 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       /* check if this is a MSP430X CALLA instruction */
       if ((op = instruction & CALLA_MASK) > RETI) {
           pc = readRegister(PC);
-          dst = -1;
+          dst = -1; /* will be -1 if not a call! */
+          /* do not update status after these instructions!!! */
+          updateStatus = false;
           switch(op) {
           case CALLA_IMM:
               dst = (dstRegister << 16) | read(pc, MODE_WORD);
               pc += 2;
               cycles += 4;
               break;
+          case CALLA_ABS:
+              /* read the address of where the address to call is */
+              dst = (dstRegister << 16) | read(pc, MODE_WORD);
+              dst = read(dst, MODE_WORD20);
+              pc += 2;
+              cycles += 4;
+              break;
           default:
-              System.out.println("CALLA: mode not implemented");
+              int type = MODE_WORD;
+              int size = 2;
+              sp = readRegister(SP);
+              /* check for PUSHM... POPM... */
+              switch(op & 0x1f00) {
+              case PUSHM_A:
+                  type = MODE_WORD20;
+                  size = 4;
+              case PUSHM_W:
+                  int n = 1 + ((instruction >> 4) & 0x0f);
+                  int regNo = instruction & 0x0f;
+
+//                  System.out.println("PUSHM " + (type == MODE_WORD20 ? "A" : "W") +
+//                          " n: " + n + " " + regNo + " at " + Utils.hex16(pcBefore));
+
+                  /* decrease stack pointer and write n times */
+                  for(int i = 0; i < n; i++) {
+                      sp -= size;
+                      write(sp, this.reg[regNo--], type);
+//                      System.out.println("Saved reg: " + (regNo + 1) + " was " + reg[regNo + 1]);
+
+                      /* what happens if regNo is wrapped ??? */
+                      if (regNo < 0) regNo = 15;
+                  }
+                  writeRegister(SP, sp);
+                  break;
+              case POPM_A:
+                  type = MODE_WORD20;
+                  size = 4;
+              case POPM_W:
+                  n = 1 + ((instruction >> 4) & 0x0f);
+                  regNo = instruction & 0x0f;
+//                  System.out.println("POPM W " + (type == MODE_WORD20 ? "A" : "W") + " n: " +
+//                          n + " " + regNo + " at " + Utils.hex16(pcBefore));
+
+                  /* read and increase stack pointer n times */
+                  for(int i = 0; i < n; i++) {
+                      this.reg[regNo++] = read(sp, type);
+//                      System.out.println("Restored reg: " + (regNo - 1) + " to " + reg[regNo - 1]);
+                      sp += size;
+                      /* what happens if regNo is wrapped ??? */
+                      if (regNo > 15) regNo = 0;
+                  }
+
+                  writeRegister(SP, sp);
+                  break;
+                  default:
+                  System.out.println("CALLA/PUSH/POP: mode not implemented");
+                  throw new EmulationException("CALLA: mode not implemented "
+                          + Utils.hex16(instruction) + " => " + Utils.hex16(op));
+              }
           }
           // store current PC on stack. (current PC points to next instr.)
           /* store 20 bits on stack (costs two words) */
@@ -1151,6 +1352,10 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
               write(sp, pc & 0xffff, MODE_WORD);
               writeRegister(SP, sp);
               writeRegister(PC, dst);
+              
+              if (profiler != null) {
+                  profileCall(dst, pc);
+              }
           }
       } else {
           // Address mode of destination...
@@ -1217,7 +1422,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
               }
           }
 
-
           // Perform the read
           if (dstRegMode) {
               dst = readRegisterCG(dstRegister, ad);
@@ -1225,134 +1429,159 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
               if (!word) {
                   dst &= 0xff;
               }
+              /* set the repeat here! */
+              if ((extWord & EXTWORD_REPEAT) > 0) {
+                  repeats = 1 + readRegister(ext3_0) & 0xf;
+              } else {
+                  repeats = 1 + ext3_0;                  
+              }
+              zeroCarry = (extWord & EXTWORD_ZC) > 0;
+
+//              if (repeats > 1) {
+//                  System.out.println("*** Repeat " + repeats + " ZeroCarry: " + zeroCarry);
+//              }
           } else {
               dst = read(dstAddress, word ? MODE_WORD : MODE_BYTE);
           }
-
-          switch(op) {
-          case RRC:
-              nxtCarry = (dst & 1) > 0 ? CARRY : 0;
-              dst = dst >> 1;
-              if (word) {
-                  dst |= (readRegister(SR) & CARRY) > 0 ? 0x8000 : 0;
-              } else {
-                  dst |= (readRegister(SR) & CARRY) > 0 ? 0x80 : 0;
-              }
-              // Indicate write to memory!!
-              write = true;
-              // Set the next carry!
-              writeRegister(SR, (readRegister(SR) & ~(CARRY | OVERFLOW)) | nxtCarry);
-              break;
-          case SWPB:
-              int tmp = dst;
-              dst = ((tmp >> 8) & 0xff) + ((tmp << 8) & 0xff00);
-              write = true;
-              break;
-          case RRA:
-              nxtCarry = (dst & 1) > 0 ? CARRY : 0;
-              if (word) {
-                  dst = (dst & 0x8000) | (dst >> 1);
-              } else {
-                  dst = (dst & 0x80) | (dst >> 1);
-              }
-              write = true;
-              writeRegister(SR, (readRegister(SR) & ~(CARRY | OVERFLOW)) | nxtCarry);
-              break;
-          case SXT:
-              // Extend Sign (bit 8-15 => same as bit 7)
+          
+          /* TODO: test add the loop here! */
+          while(repeats-- > 0) {
               sr = readRegister(SR);
-              dst = (dst & 0x80) > 0 ? dst | 0xff00 : dst & 0x7f;
-              write = true;
-              sr = sr & ~(CARRY | OVERFLOW);
-              if (dst != 0) {
-                  sr |= CARRY;
-              }
-              writeRegister(SR, sr);
-              break;
-          case PUSH:
-              if (word) {
-                  // Put lo & hi on stack!
-                  //	  memory[sp] = dst & 0xff;
-                  //	  memory[sp + 1] = dst >> 8;
-                  write(sp, dst, MODE_WORD);
-              } else {
-                  // Byte => only lo byte
-                  //	  memory[sp] = dst & 0xff;
-                  //	  memory[sp + 1] = 0;
-                  write(sp, dst & 0xff, MODE_WORD);
-              }
-              /* if REG or INDIRECT AUTOINC then add 2 cycles, otherwise 1 */
-              cycles += (ad == AM_REG || ad == AM_IND_AUTOINC) ? 2 : 1;
-              write = false;
-              updateStatus = false;
-              break;
-          case CALL:
-              /* Is this call a checkpoint?  If so, take a snapshot of the
-               * current state. */
-              CheckpointValidator cv = (CheckpointValidator) registry.getComponent("checkpointing");
-              if (dst == cv.getCPFunc()) {
-                System.err.println("Checkpoint function called");
-                cv.preCall(reg, memory, cycles);
-                cv.pushFunCall();
-              } else if (cv.isInChk()) {
-                cv.pushFunCall();
-              }
-
-              // store current PC on stack. (current PC points to next instr.)
-              pc = readRegister(PC);
-              //	memory[sp] = pc & 0xff;
-              //	memory[sp + 1] = pc >> 8;
-              write(sp, pc, MODE_WORD);
-              writeRegister(PC, dst);
-
-              /* Additional cycles: REG => 3, AM_IND_AUTO => 2, other => 1 */
-              cycles += (ad == AM_REG) ? 3 : (ad == AM_IND_AUTOINC) ? 2 : 1;
-
-              /* profiler will be called during calls */
-              if (profiler != null) {
-                  MapEntry function = map.getEntry(dst);
-                  if (function == null) {
-                      function = getFunction(map, dst);
+              /* always clear carry before repeat */
+              if (repeats >= 0) {
+                  if (zeroCarry) {
+                      sr = sr & ~CARRY;
+                      //System.out.println("ZC => Cleared carry...");
                   }
-                  profiler.profileCall(function, cpuCycles, pc);
+                  //System.out.println("*** Repeat: " + repeats);
               }
+              switch(op) {
+              case RRC:
+                  nxtCarry = (dst & 1) > 0 ? CARRY : 0;
+                  dst = dst >> 1;
+                  if (word) {
+                      dst |= (sr & CARRY) > 0 ? 0x8000 : 0;
+                  } else {
+                      dst |= (sr & CARRY) > 0 ? 0x80 : 0;
+                  }
+                  // Indicate write to memory!!
+                  write = true;
+                  // Set the next carry!
+                  writeRegister(SR, (sr & ~(CARRY | OVERFLOW)) | nxtCarry);
+                  break;
+              case SWPB:
+                  int tmp = dst;
+                  dst = ((tmp >> 8) & 0xff) + ((tmp << 8) & 0xff00);
+                  write = true;
+                  break;
+              case RRA:
+                  nxtCarry = (dst & 1) > 0 ? CARRY : 0;
+                  if (word) {
+                      dst = (dst & 0x8000) | (dst >> 1);
+                  } else {
+                      dst = (dst & 0x80) | (dst >> 1);
+                  }
+                  write = true;
+                  writeRegister(SR, (sr & ~(CARRY | OVERFLOW)) | nxtCarry);
+                  break;
+              case SXT:
+                  // Extend Sign (bit 8-15 => same as bit 7)
+                  dst = (dst & 0x80) > 0 ? dst | 0xff00 : dst & 0x7f;
+                  write = true;
+                  sr = sr & ~(CARRY | OVERFLOW);
+                  if (dst != 0) {
+                      sr |= CARRY;
+                  }
+                  writeRegister(SR, sr);
+                  break;
+              case PUSH:
+                  if (word) {
+                      // Put lo & hi on stack!
+                      //	  memory[sp] = dst & 0xff;
+                      //	  memory[sp + 1] = dst >> 8;
+                      write(sp, dst, MODE_WORD);
+                  } else {
+                      // Byte => only lo byte
+                      //	  memory[sp] = dst & 0xff;
+                      //	  memory[sp + 1] = 0;
+                      write(sp, dst & 0xff, MODE_WORD);
+                  }
+                  /* if REG or INDIRECT AUTOINC then add 2 cycles, otherwise 1 */
+                  cycles += (ad == AM_REG || ad == AM_IND_AUTOINC) ? 2 : 1;
+                  write = false;
+                  updateStatus = false;
+                  break;
+              case CALL:
+                  /* Is this call a checkpoint?  If so, take a snapshot of the
+                   * current state. */
+                  CheckpointValidator cv = (CheckpointValidator) registry.getComponent("checkpointing");
+                  if (dst == cv.getCPFunc()) {
+                      System.err.println("Checkpoint function called");
+                      cv.preCall(reg, memory, cycles);
+                      cv.pushFunCall();
+                  } else if (cv.isInChk()) {
+                      cv.pushFunCall();
+                  }
 
-              write = false;
-              updateStatus = false;
-              break;
-          case RETI:
-              // Put Top of stack to Status DstRegister (TOS -> SR)
-              servicedInterrupt = -1; /* needed before write to SR!!! */
-              sp = readRegister(SP);
-              sr = read(sp, MODE_WORD);
-              writeRegister(SR, sr & 0x0fff);
-              sp = sp + 2;
-              //	writeRegister(SR, memory[sp++] + (memory[sp++] << 8));
-              // TOS -> PC
-              //	writeRegister(PC, memory[sp++] + (memory[sp++] << 8));
-              writeRegister(PC, read(sp, MODE_WORD) | (sr & 0xf000) << 4);
-              sp = sp + 2;
-              writeRegister(SP, sp);
-              write = false;
-              updateStatus = false;
+                  // store current PC on stack. (current PC points to next instr.)
+                  pc = readRegister(PC);
+                  //	memory[sp] = pc & 0xff;
+                  //	memory[sp + 1] = pc >> 8;
+                  write(sp, pc, MODE_WORD);
+                  writeRegister(PC, dst);
 
-              cycles += 4;
+                  /* Additional cycles: REG => 3, AM_IND_AUTO => 2, other => 1 */
+                  cycles += (ad == AM_REG) ? 3 : (ad == AM_IND_AUTOINC) ? 2 : 1;
 
-              if (debugInterrupts) {
-                  System.out.println("### RETI at " + pc + " => " + reg[PC] +
-                          " SP after: " + reg[SP]);
-              }        
-              if (profiler != null) {
-                  profiler.profileRETI(cycles);
+                  /* profiler will be called during calls */
+                  if (profiler != null) {
+                      profileCall(dst, pc);
+                  }
+
+                  write = false;
+                  updateStatus = false;
+                  break;
+              case RETI:
+                  // Put Top of stack to Status DstRegister (TOS -> SR)
+                  servicedInterrupt = -1; /* needed before write to SR!!! */
+                  sp = readRegister(SP);
+                  sr = read(sp, MODE_WORD);
+                  writeRegister(SR, sr & 0x0fff);
+                  sp = sp + 2;
+                  //	writeRegister(SR, memory[sp++] + (memory[sp++] << 8));
+                  // TOS -> PC
+                  //	writeRegister(PC, memory[sp++] + (memory[sp++] << 8));
+                  writeRegister(PC, read(sp, MODE_WORD) | (sr & 0xf000) << 4);
+                  sp = sp + 2;
+                  writeRegister(SP, sp);
+                  write = false;
+                  updateStatus = false;
+
+                  cycles += 4;
+
+                  if (debugInterrupts) {
+                      System.out.println("### RETI at " + pc + " => " + reg[PC] +
+                              " SP after: " + reg[SP]);
+                  }        
+                  if (profiler != null) {
+                      profiler.profileRETI(cycles);
+                  }
+
+                  // This assumes that all interrupts will get back using RETI!
+                  handlePendingInterrupts();
+
+                  break;
+              default:
+                  System.out.println("Error: Not implemented instruction:" +
+                          Utils.hex16(instruction));
               }
-
-              // This assumes that all interrupts will get back using RETI!
-              handlePendingInterrupts();
-
-              break;
-          default:
-              System.out.println("Error: Not implemented instruction:" +
-                      instruction);
+              if (repeats > 0) {
+                  if (!word) {
+                      dst &= 0xff;
+                  } else {
+                      dst &= 0xffff;
+                  }
+              }
           }
       }
     }
@@ -1436,6 +1665,18 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
 	  cycles += dstRegMode ? 1 : 4;
 	  /* add cycle if destination register = PC */
           if (dstRegister == PC) cycles++;
+          
+          if (dstRegMode) {
+              /* possible to have repeat, etc... */
+              /* TODO: decode the # also */
+              if ((extWord & EXTWORD_REPEAT) > 0) {
+                  repeats = 1 + readRegister(ext3_0) & 0xf;
+              } else {
+                  repeats = 1 + ext3_0;                  
+              }
+              zeroCarry = (extWord & EXTWORD_ZC) > 0;
+          }
+          
 	  break;
 	case AM_INDEX:
 	  // Indexed if reg != PC & CG1/CG2 - will PC be incremented?
@@ -1512,8 +1753,10 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       // **** Perform the read...
       if (srcAddress != -1) {
 
-	// Got very high address - check that?!!
-	srcAddress = srcAddress & 0xffff;
+//        if (srcAddress  > 0xffff) {
+//            System.out.println("SrcAddress is: " + Utils.hex20(srcAddress));
+//        }
+//	srcAddress = srcAddress & 0xffff;
 
 	src = read(srcAddress, word ? MODE_WORD : MODE_BYTE);
 
@@ -1523,171 +1766,189 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
 	// 	  }
       }
 
-      int tmp = 0;
-      int tmpAdd = 0;
-      switch (op) {
-      case MOV: // MOV
-	dst = src;
-	write = true;
-	updateStatus = false;
-	
-	if (instruction == RETURN && profiler != null) {
-				  profiler.profileReturn(cycles);
-			  }
+      /* TODO: test add the loop here! */
+      while(repeats-- > 0) {
+          sr = readRegister(SR);
+          if (repeats >= 0) {
+              if (zeroCarry) {
+                  sr = sr & ~CARRY;
+                  //System.out.println("ZC => Cleared carry...");
+              }
+              //System.out.println("*** Repeat: " + repeats);
+          }
 
-			  if (instruction == RETURN)
-			  {
-				  //returning from a checkpoint?.  If so, compare saved data to saved snapshot
-				  CheckpointValidator chv = (CheckpointValidator) registry.getComponent("checkpointing");
-				  //System.out.println("Checkpoint check!");
-				  if (chv.isInChk())
-				  {
-					  // System.err.println("heap start = "+map.heapStartAddress);
-					  if (chv.popFunCall() == 0) {
-						  System.err.println("Checkpoint function returned!");
-						  if (!chv.postCall(reg, memory, map.stackStartAddress, cycles)) {
-							  System.err.println("Bad checkpoint; stopping.");
-						  }
-					  }
-				  }	
-	}
-	
-	break;
-	// FIX THIS!!! - make SUB a separate operation so that
-	// it is clear that overflow flag is correct...
-      case SUB:
-	// Carry always 1 with SUB
-	tmpAdd = 1;
-      case SUBC:
-	// Both sub and subc does one complement (not) + 1 (or carry)
-	src = (src ^ 0xffff) & 0xffff;
-      case ADDC: // ADDC
-	if (op == ADDC || op == SUBC)
-	  tmpAdd = ((readRegister(SR) & CARRY) > 0) ? 1 : 0;
-      case ADD: // ADD
-	// Tmp gives zero if same sign! if sign is different after -> overf.
-	sr = readRegister(SR);
-	sr &= ~(OVERFLOW | CARRY);
+          int tmp = 0;
+          int tmpAdd = 0;
+          switch (op) {
+          case MOV: // MOV
+              dst = src;
+              write = true;
+              updateStatus = false;
 
-	tmp = (src ^ dst) & (word ? 0x8000 : 0x80);
-	// Includes carry if carry should be added...
+              if (instruction == RETURN && profiler != null) {
+                  profiler.profileReturn(cpuCycles);
+              }
 
-	dst = dst + src + tmpAdd;
+			  if (instruction == RETURN) {
+                  //returning from a checkpoint?.  If so, compare saved data to saved snapshot
+                  CheckpointValidator chv = (CheckpointValidator)registry.getComponent("checkpointing");
+                  //System.out.println("Checkpoint check!");
+                  if (chv.isInChk()) {
+                      // System.err.println("heap start = "+map.heapStartAddress);
+                      if (chv.popFunCall() == 0) {
+                          System.err.println("Checkpoint function returned!");
+                          if (!chv.postCall(reg, memory, map.stackStartAddress, cycles)) {
+                              System.err.println("Bad checkpoint; stopping.");
+                          }
+                      }
+                  }
+              }
 
-	if (dst > (word ? 0xffff : 0xff)) {
-	  sr |= CARRY;
-	}
-	// If tmp == 0 and currenly not the same sign for src & dst
-	if (tmp == 0 && ((src ^ dst) & (word ? 0x8000 : 0x80)) != 0) {
-	  sr |= OVERFLOW;
-	  // 	    System.out.println("OVERFLOW - ADD/SUB " + Utils.hex16(src)
-	  // 			       + " + " + Utils.hex16(tmpDst));
-	}
+              break;
+              // FIX THIS!!! - make SUB a separate operation so that
+              // it is clear that overflow flag is correct...
+          case SUB:
+              // Carry always 1 with SUB
+              tmpAdd = 1;
+          case SUBC:
+              // Both sub and subc does one complement (not) + 1 (or carry)
+              src = (src ^ 0xffff) & 0xffff;
+          case ADDC: // ADDC
+              if (op == ADDC || op == SUBC)
+                  tmpAdd = ((sr & CARRY) > 0) ? 1 : 0;
+          case ADD: // ADD
+              // Tmp gives zero if same sign! if sign is different after -> overf.
+              sr &= ~(OVERFLOW | CARRY);
 
-	// 	  System.out.println(Utils.hex16(dst) + " [SR=" +
-	// 			     Utils.hex16(reg[SR]) + "]");
-	writeRegister(SR, sr);
-	write = true;
-	break;
-      case CMP: // CMP
-	// Set CARRY if A >= B, and it's clear if A < B
-	int b = word ? 0x8000 : 0x80;
-	sr = readRegister(SR);
-	sr = (sr & ~(CARRY | OVERFLOW)) | (dst >= src ? CARRY : 0);
+              tmp = (src ^ dst) & (word ? 0x8000 : 0x80);
+              // Includes carry if carry should be added...
 
-	tmp = (dst - src);
-	
-	if (((src ^ tmp) & b) == 0 && (((src ^ dst) & b) != 0)) {
-	  sr |= OVERFLOW;
-	}
-	writeRegister(SR, sr);
-	// Must set dst to the result to set the rest of the status register
-	dst = tmp;
-	break;
-      case DADD: // DADD
-	if (DEBUG)
-	  log("DADD: Decimal add executed - result error!!!");
-	// Decimal add... this is wrong... each nibble is 0-9...
-	// So this has to be reimplemented...
-	dst = dst + src + ((readRegister(SR) & CARRY) > 0 ? 1 : 0);
-	write = true;
-	break;
-      case BIT: // BIT
-	dst = src & dst;
-	sr = readRegister(SR);
-	// Clear overflow and carry!
-	sr = sr & ~(CARRY | OVERFLOW);
-	// Set carry if result is non-zero!
-	if (dst != 0) {
-	  sr |= CARRY;
-	}
-	writeRegister(SR, sr);
-	break;
-      case BIC: // BIC
-	// No status reg change
-	// 	  System.out.println("BIC: =>" + Utils.hex16(dstAddress) + " => "
-	// 			     + Utils.hex16(dst) + " AS: " + as +
-	// 			     " sReg: " + srcRegister + " => " + src +
-	// 			     " dReg: " + dstRegister + " => " + dst);
-	dst = (~src) & dst;
+              dst = dst + src + tmpAdd;
 
-	write = true;
-	updateStatus = false;
-	break;
-      case BIS: // BIS
-	dst = src | dst;
-	write = true;
-	updateStatus = false;
-	break;
-      case XOR: // XOR
-        sr = readRegister(SR);
-        sr = sr & ~(CARRY | OVERFLOW);
-        if ((src & (word ? 0x8000 : 0x80)) != 0 && (dst & (word ? 0x8000 : 0x80)) != 0) {
-          sr |= OVERFLOW;
-        }
-        dst = src ^ dst;
-        if (dst != 0) {
-          sr |= CARRY;
-        }
-        write = true;
-        writeRegister(SR, sr);
-        break;
-      case AND: // AND
-        sr = readRegister(SR);
-        sr = sr & ~(CARRY | OVERFLOW);
-        dst = src & dst;
-        if (dst != 0) {
-          sr |= CARRY;
-        }
-        write = true;
-        writeRegister(SR, sr);
-        break;
-      case 0: // encountered if main() returns
-        long totalCycles = capacitor.accumCycleCount + cycles;
-        long memCycles = totalMementosCycles + // previous lifecycles
-          profiler.getMementosCycles();        // this lifecycle
-        throw new StopExecutionException(readRegister(15),
-            "Encountered opcode 0 after " +
-            totalCycles + " cycles " +
-            "in " + capacitor.getNumLifecycles() + " lifecycles; " +
-            "R15=" + Utils.hex16(readRegister(15)) +
-            "; PC=" + Utils.hex16(memory[readRegister(PC)]) +
-            "; prev PC=" + Utils.hex16(previousPC) +
-            "; SP=" + Utils.hex16(memory[readRegister(SP)]) +
-            "; wasted=" + totalWastedCycles +
-            " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
-            "; mementosCycles()=" + memCycles +
-            " (" + (100.0 * memCycles / totalCycles) + "%)"
-            );
-      default:
-	logw("DoubleOperand not implemented: op = " + op + " at " + pc);
-	if (EXCEPTION_ON_BAD_OPERATION) {
-	  EmulationException ex = new EmulationException("Bad operation: " + op + " at " + pc);
-	  ex.initCause(new Throwable("" + pc));
-	  throw ex;
-	}
+              if (dst > (word ? 0xffff : 0xff)) {
+                  sr |= CARRY;
+              }
+              // If tmp == 0 and currenly not the same sign for src & dst
+              if (tmp == 0 && ((src ^ dst) & (word ? 0x8000 : 0x80)) != 0) {
+                  sr |= OVERFLOW;
+                  // 	    System.out.println("OVERFLOW - ADD/SUB " + Utils.hex16(src)
+                  // 			       + " + " + Utils.hex16(tmpDst));
+              }
+
+              // 	  System.out.println(Utils.hex16(dst) + " [SR=" +
+              // 			     Utils.hex16(reg[SR]) + "]");
+              writeRegister(SR, sr);
+              write = true;
+              break;
+          case CMP: // CMP
+              // Set CARRY if A >= B, and it's clear if A < B
+              int b = word ? 0x8000 : 0x80;
+              sr = (sr & ~(CARRY | OVERFLOW)) | (dst >= src ? CARRY : 0);
+
+              tmp = (dst - src);
+
+              if (((src ^ tmp) & b) == 0 && (((src ^ dst) & b) != 0)) {
+                  sr |= OVERFLOW;
+              }
+              writeRegister(SR, sr);
+              // Must set dst to the result to set the rest of the status register
+              dst = tmp;
+              break;
+          case DADD: // DADD
+              if (DEBUG)
+                  log("DADD: Decimal add executed - result error!!!");
+              // Decimal add... this is wrong... each nibble is 0-9...
+              // So this has to be reimplemented...
+              dst = dst + src + ((sr & CARRY) > 0 ? 1 : 0);
+              write = true;
+              break;
+          case BIT: // BIT
+              dst = src & dst;
+              // Clear overflow and carry!
+              sr = sr & ~(CARRY | OVERFLOW);
+              // Set carry if result is non-zero!
+              if (dst != 0) {
+                  sr |= CARRY;
+              }
+              writeRegister(SR, sr);
+              break;
+          case BIC: // BIC
+              // No status reg change
+              // 	  System.out.println("BIC: =>" + Utils.hex16(dstAddress) + " => "
+              // 			     + Utils.hex16(dst) + " AS: " + as +
+              // 			     " sReg: " + srcRegister + " => " + src +
+              // 			     " dReg: " + dstRegister + " => " + dst);
+              dst = (~src) & dst;
+
+              write = true;
+              updateStatus = false;
+              break;
+          case BIS: // BIS
+              dst = src | dst;
+              write = true;
+              updateStatus = false;
+              break;
+          case XOR: // XOR
+              sr = sr & ~(CARRY | OVERFLOW);
+              if ((src & (word ? 0x8000 : 0x80)) != 0 && (dst & (word ? 0x8000 : 0x80)) != 0) {
+                  sr |= OVERFLOW;
+              }
+              dst = src ^ dst;
+              if (dst != 0) {
+                  sr |= CARRY;
+              }
+              write = true;
+              writeRegister(SR, sr);
+              break;
+          case AND: // AND
+              sr = sr & ~(CARRY | OVERFLOW);
+              dst = src & dst;
+              if (dst != 0) {
+                  sr |= CARRY;
+              }
+              write = true;
+              writeRegister(SR, sr);
+              break;
+          case 0: // encountered if main() returns
+              long totalCycles = capacitor.accumCycleCount + cycles;
+              long memCycles = totalMementosCycles + // previous lifecycles
+                  profiler.getMementosCycles();        // this lifecycle
+              throw new StopExecutionException(readRegister(15),
+                      "Encountered opcode 0 after " +
+                      totalCycles + " cycles " +
+                      "in " + capacitor.getNumLifecycles() + " lifecycles; " +
+                      "R15=" + Utils.hex16(readRegister(15)) +
+                      "; PC=" + Utils.hex16(memory[readRegister(PC)]) +
+                      "; prev PC=" + Utils.hex16(previousPC) +
+                      "; SP=" + Utils.hex16(memory[readRegister(SP)]) +
+                      "; wasted=" + totalWastedCycles +
+                      " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
+                      "; mementosCycles()=" + memCycles +
+                      " (" + (100.0 * memCycles / totalCycles) + "%)"
+                      );
+          default:
+              logw("DoubleOperand not implemented: op = " + op + " at " + pc);
+              if (EXCEPTION_ON_BAD_OPERATION) {
+                  EmulationException ex = new EmulationException("Bad operation: " + op + " at " + pc);
+                  ex.initCause(new Throwable("" + pc));
+                  throw ex;
+              }
+          } /* after switch(op) */
+          /* If we have the same register as dst and src then copy here to get input
+           * in next loop
+           */
+          if(repeats > 0 && srcRegister == dstRegister) {
+              src = dst;
+              if (!word) {
+                  src &= 0xff;
+              } else {
+                  src &= 0xffff;
+              }
+          }
       }
     }
+    
+    /* Processing after each instruction */
     if (word) {
       dst &= 0xffff;
     } else {
@@ -1768,10 +2029,13 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
               + "  ACLK: " + aclkFrq + " Hz  SMCLK: " + smclkFrq + " Hz\n"
               + " Cycles: " + cycles + "  CPU Cycles: " + cpuCycles
               + "  Time: " + (long)getTimeMillis() + " msec\n");
-      for (int i = 0; i < 16; i++) {
-            buf.append(" Vector " + (15 - i) + " at $"
-                    + Utils.hex16(0xfffe - i * 2) + " -> $"
-                    + Utils.hex16(read(0xfffe - i * 2, MODE_WORD)) + "\n");
+      buf.append(" Interrupt enabled: " + interruptsEnabled +  " HighestInterrupt: " + interruptMax);
+      for (int i = 0; i < MAX_INTERRUPT; i++) {
+          if (read(0xfffe - i * 2, MODE_WORD) != 0xffff) {
+              buf.append(" Vector " + (MAX_INTERRUPT - i) + " at $"
+                      + Utils.hex16(0xfffe - i * 2) + " -> $"
+                      + Utils.hex16(read(0xfffe - i * 2, MODE_WORD)) + "\n");
+          }
       }
       return buf.toString();
   }
