@@ -147,7 +147,6 @@ public class BasicClockModule extends IOUnit {
 
     // resistor selects three bits gives the highest impact on the DCO_FACTOR
     // then dcoFrq and last dcoModulator
-    /* // XXX why is this commented out?
     int newcalcDCOFrq = ((dcoFrequency << 5) + dcoModulator +
 			 (resistorSel << 8)) * DCO_FACTOR + MIN_DCO_FRQ;
     if (newcalcDCOFrq != calcDCOFrq) {
@@ -156,7 +155,6 @@ public class BasicClockModule extends IOUnit {
       core.setDCOFrq(calcDCOFrq, calcDCOFrq / divSMclk);
       updateTimers(cycles);
     }
-    */
   }
 
   private void updateTimers(long cycles) {

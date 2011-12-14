@@ -149,10 +149,9 @@ public class Flash extends IOUnit {
 	  logw("Last access in block mode. Forced exit?");
 	  currentWriteMode = WriteMode.WRITE_BLOCK_FINISH;
 	}
-				/*
-				 * if (DEBUG) {
-				 * System.out.println("Write cycle complete, flagged WAIT."); }
-				 */
+/*	if (DEBUG) {
+	  System.out.println("Write cycle complete, flagged WAIT."); }
+	} */
 	wait = true;
 	break;
 	
@@ -167,9 +166,9 @@ public class Flash extends IOUnit {
 	break;
       }
     }
-		public String toString () {
-			return this.getClass().getName();
-		}
+	public String toString () {
+	  return this.getClass().getName();
+	}
   };
   
   public Flash(MSP430Core cpu, int[] memory, FlashRange main_range,
