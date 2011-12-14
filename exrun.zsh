@@ -4,7 +4,7 @@
 # set a $VTRACE=filename env var to run against a voltage trace
 
 MEMENTOS="/opt/mementos/src/mementos"
-JAVACMD="java -classpath '.:lib/jcommon-1.0.14.jar:lib/jfreechart-1.0.11.jar:lib/jipv6.jar' se.sics.mspsim.platform.wisp.WispNode -nogui -exitwhendone"
+JAVACMD="java -classpath 'mspsim.jar:lib/jcommon-1.0.14.jar:lib/jfreechart-1.0.11.jar:lib/jipv6.jar' se.sics.mspsim.platform.wisp.WispNode -nogui -exitwhendone"
 LOGDIRPART=""
 if [[ -n "$VTRACE" ]]; then
 	JAVACMD+=" -voltagetrace=${VTRACE}"
