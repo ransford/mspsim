@@ -185,6 +185,6 @@ else
 endif
 
 ### tags
-.tags:
-	find . -type f -name \*.java -print0 | \
-		xargs -0 etags --no-defines --language=java -o .tags **/*.java
+CTAGS ?= /opt/local/bin/ctags
+.tags: $(SOURCES)
+	$(CTAGS) -f $@ $(SOURCES)
