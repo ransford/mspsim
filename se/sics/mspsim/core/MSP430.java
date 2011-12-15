@@ -44,7 +44,6 @@ import java.io.PrintStream;
 
 import se.sics.mspsim.util.ArrayUtils;
 import se.sics.mspsim.util.ComponentRegistry;
-import se.sics.mspsim.util.ConfigManager;
 import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.SimpleProfiler;
 
@@ -84,7 +83,6 @@ public class MSP430 extends MSP430Core {
   public MSP430(int type, ComponentRegistry registry, MSP430Config config) {
     super(type, registry, config);
     disAsm = new DisAsm();
-    addChip(this);
 
     capacitor = new Capacitor(this,
             10e-6 /* capacitance, farads */,
@@ -160,6 +158,21 @@ public class MSP430 extends MSP430Core {
 		tracePos = 0;
 	}
       }
+
+      /* Just a test to see if it gets down to a reasonable speed */
+      if (cycles > nextSleep) {
+	try {
+	  Thread.sleep(10);
+	} catch (Exception e) {
+	}
+	// Frequency = 100 * cycles ratio
+	// Ratio = Frq / 100
+	nextSleep = cycles + sleepRate;
+      }
+
+//       if ((instruction & 0xff80) == CALL) {
+// 	System.out.println("Call to PC = " + reg[PC]);
+//       }
     }
   }
 

@@ -90,7 +90,7 @@ public class Flash extends IOUnit {
   };
   
   private static final int MASS_ERASE_TIME = 5297;
-	private static final int SEGMENT_ERASE_TIME = 4354;
+  private static final int SEGMENT_ERASE_TIME = 4354;
   
   private static final int WRITE_TIME = 35;
 
@@ -118,10 +118,10 @@ public class Flash extends IOUnit {
   
   private TimeEvent end_process = new TimeEvent(0) {
     public void execute(long t) {
-			System.err.println("Unblocking CPU...");
+      System.err.println("Unblocking CPU...");
       blocked_cpu = false;
-			cpu.getCapacitor().updateVoltage(false);
-			cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getCapacitor().updateVoltage(false);
+      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
       
       switch(currentWriteMode) {
       case NONE:
@@ -150,7 +150,7 @@ public class Flash extends IOUnit {
 	  currentWriteMode = WriteMode.WRITE_BLOCK_FINISH;
 	}
 /*	if (DEBUG) {
-	  System.out.println("Write cycle complete, flagged WAIT."); }
+	  System.out.println("Write cycle complete, flagged WAIT.");
 	} */
 	wait = true;
 	break;
@@ -166,9 +166,6 @@ public class Flash extends IOUnit {
 	break;
       }
     }
-	public String toString () {
-	  return this.getClass().getName();
-	}
   };
   
   public Flash(MSP430Core cpu, int[] memory, FlashRange main_range,

@@ -38,24 +38,24 @@
 package se.sics.mspsim.core;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.lang.Math;
-
-import se.sics.mspsim.platform.GenericNode;
-import se.sics.mspsim.platform.ShouldRetryLifecycleException;
 import se.sics.mspsim.util.ComponentRegistry;
 import se.sics.mspsim.util.MapEntry;
 import se.sics.mspsim.util.MapTable;
-import se.sics.mspsim.util.SimpleProfiler;
 import se.sics.mspsim.util.Utils;
 
+import java.lang.Math;
 import edu.umass.energy.CapClockSource;
 import edu.umass.energy.DeadTimer;
+import se.sics.mspsim.platform.GenericNode;
+import se.sics.mspsim.platform.ShouldRetryLifecycleException;
 import se.sics.mspsim.util.CheckpointValidator;
+import se.sics.mspsim.util.SimpleProfiler;
 
 /**
  * The CPU of the MSP430
  */
-public class MSP430Core extends Chip implements MSP430Constants, CapClockSource {
+public class MSP430Core extends Chip implements MSP430Constants,
+       CapClockSource {
 
   public static final int RETURN = 0x4130;
 
@@ -63,9 +63,6 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
 
   public static final boolean EXCEPTION_ON_BAD_OPERATION = true;
 
-  public static final int MSP430F2132 = 0;
-  public static final int MSP430F1611 = 1;
-  
   // Try it out with 64 k memory
   public final int MAX_MEM;
   public final int MAX_MEM_IO;
@@ -133,7 +130,10 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   // Other clocks too...
   long nextEventCycles;
   private EventQueue vTimeEventQueue = new EventQueue();
+  private long nextVTimeEventCycles;
+
   private EventQueue cycleEventQueue = new EventQueue();
+  private long nextCycleEventCycles;
   
   private ArrayList<Chip> chips = new ArrayList<Chip>();
 
@@ -436,7 +436,7 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       rwm.cpuAction(CPUMonitor.REGISTER_WRITE, r, value);
     }
     reg[r] = value;
-    if (r == SR) { //If writing to the status register
+    if (r == SR) {
       boolean oldCpuOff = cpuOff;
       if (debugInterrupts) {
           if (((value & GIE) == GIE) != interruptsEnabled) {
@@ -541,9 +541,9 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
   
   // returns global time counted in max speed of DCOs (~5Mhz)
   public long getTime() {
-	  //currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / 1000000;
-	  //How many cycles have passed since what?
-	  //It looks like lastCyclesTime is only updated on reset
+    //currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / 1000000;
+    //How many cycles have passed since what?
+    //It looks like lastCyclesTime is only updated on reset
     long diff = cycles - lastCyclesTime;
     return lastVTime + (long) (diff * currentDCOFactor);
   }
@@ -556,9 +556,9 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
     return tmpTime;
   }
   
-  // get elapsed time in milliseconds
+  // get elapsed time in seconds
   public double getTimeMillis() {
-    return 1000.0 * getTime() / BasicClockModule.DCO_FRQ;
+    return 1000.0 * getTime() / BasicClockModule.MAX_DCO_FRQ;
   }
   
   private void executeEvents() {
@@ -1958,13 +1958,13 @@ public class MSP430Core extends Chip implements MSP430Constants, CapClockSource 
       if (dstRegMode) {
 	writeRegister(dstRegister, dst);
 
-			  /* treat 'BR &main' specially */
-			  if (dstRegister == PC && dst == mainfn_addr) {
-				  MapEntry mainfn = map.getEntry(mainfn_addr);
-				  if (null == mainfn)
-					  mainfn = getFunction(map, mainfn_addr);
-				  profiler.profileCall(mainfn, cycles, pc);
-			  }
+	/* treat 'BR &main' specially */
+	if (dstRegister == PC && dst == mainfn_addr) {
+	  MapEntry mainfn = map.getEntry(mainfn_addr);
+	  if (null == mainfn)
+	    mainfn = getFunction(map, mainfn_addr);
+	  profiler.profileCall(mainfn, cycles, pc);
+	}
       } else {
 	dstAddress &= 0xffff;
 	write(dstAddress, dst, word ? MODE_WORD : MODE_BYTE);
