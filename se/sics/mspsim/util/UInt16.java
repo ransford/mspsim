@@ -1,3 +1,5 @@
+package se.sics.mspsim.util;
+
 import java.lang.Math;
 
 public class UInt16 {
