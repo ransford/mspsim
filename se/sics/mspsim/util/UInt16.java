@@ -1,7 +1,5 @@
 package se.sics.mspsim.util;
 
-import java.lang.Math;
-
 public class UInt16 {
     public static final int MIN_VALUE = 0;
     public static final int MAX_VALUE = 0xffff;
