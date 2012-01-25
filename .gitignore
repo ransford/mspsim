@@ -3,3 +3,6 @@
 /.tags
 /mspsim.jar
 /firmware/*+*
+/nbproject/private/
+/dist/
+/build/
