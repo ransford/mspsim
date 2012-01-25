@@ -308,7 +308,7 @@ public class Flash extends IOUnit {
       break;
       
     case ERASE_ALL:
-			clearAll();
+      clearAll();
       waitFlashProcess(MASS_ERASE_TIME);
       break;
     case WRITE_SINGLE:

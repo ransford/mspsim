@@ -33,7 +33,7 @@
  *
  * DotDiagram
  *
- * Author  : Joakim Eriksson, Niclas Finne, Fredrik Österlind
+ * Author  : Joakim Eriksson, Niclas Finne, Fredrik Ã–sterlind
  * Created : Sun Oct 21 22:00:00 2007
  * Updated : $Date$
  *           $Revision$
