@@ -1134,7 +1134,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
     writeRegister(PC, pc);
 
     switch (op) {
-    case 0:
+    case -999999: /* XXX was case 0 -- but mementos mspsim wants op==0 to
+                     signify end-of-program */
         // MSP430X - additional instructions
         op = instruction & 0xf0f0;
 //        System.out.println("Executing MSP430X instruction op:" + Utils.hex16(op) +
