@@ -42,7 +42,6 @@
 package se.sics.mspsim.platform.crfid;
 import java.io.IOException;
 
-import se.sics.mspsim.config.MSP430f2132Config;
 import se.sics.mspsim.core.ADC12;
 import se.sics.mspsim.core.ADCInput;
 import se.sics.mspsim.core.IOUnit;
@@ -51,13 +50,14 @@ import se.sics.mspsim.core.IOUnit;
 import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.util.ArgumentManager;
 import java.lang.Math;
+import se.sics.mspsim.config.MSP430f2618Config;
 
 public class MooNode extends GenericNode implements ADCInput {
   public static final boolean DEBUG = false;
   public static final int MODE_MAX = 0; // ?
 
   public MooNode () {
-      super("Moo", new MSP430f2132Config());
+      super("Moo", new MSP430f2618Config());
   }
 
   public boolean getDebug () {
