@@ -31,7 +31,7 @@
  *
  * -----------------------------------------------------------------
  *
- * WispNode
+ * MooNode
  *
  * Author  : ransford@cs.umass.edu
  * Created : Fri Nov 13 10:27:50 2009
@@ -39,7 +39,7 @@
  *           $Revision$
  */
 
-package se.sics.mspsim.platform.wisp;
+package se.sics.mspsim.platform.crfid;
 import java.io.IOException;
 
 import se.sics.mspsim.config.MSP430f2132Config;
@@ -52,12 +52,12 @@ import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.util.ArgumentManager;
 import java.lang.Math;
 
-public class WispNode extends GenericNode implements ADCInput {
+public class MooNode extends GenericNode implements ADCInput {
   public static final boolean DEBUG = false;
   public static final int MODE_MAX = 0; // ?
 
-  public WispNode () {
-      super("WISP", new MSP430f2132Config());
+  public MooNode () {
+      super("Moo", new MSP430f2132Config());
   }
 
   public boolean getDebug () {
@@ -76,7 +76,7 @@ public class WispNode extends GenericNode implements ADCInput {
   }
 
   public String getName () {
-      return "WISP";
+      return "Moo";
   }
 
   public int getModeMax () {
@@ -86,11 +86,11 @@ public class WispNode extends GenericNode implements ADCInput {
   public static void main (String[] args) throws IOException {
       ArgumentManager config = new ArgumentManager();
       config.handleArguments(args);
-      WispNode node;
+      MooNode node;
 
       /* XXX figure out whether f2132 or f1611 or what */
 
-      node = new WispNode();
+      node = new MooNode();
       node.setupArgs(config);
   }
 
