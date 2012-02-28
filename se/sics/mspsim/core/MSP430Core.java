@@ -1767,7 +1767,8 @@ public class MSP430Core extends Chip implements MSP430Constants {
 	  break;
 	case AM_INDEX:
 	  // Indexed if reg != PC & CG1/CG2 - will PC be incremented?
-	  srcAddress = readRegisterCG(srcRegister, as) + read(pc, MODE_WORD);
+	  srcAddress = (readRegisterCG(srcRegister, as) + read(pc, MODE_WORD))
+          & 0xffff;
 //	    memory[pc] + (memory[pc + 1] << 8);
 	  // When is PC incremented - assuming immediately after "read"?
 	  
