@@ -58,12 +58,12 @@ public class DebugCommands implements CommandBundle {
   private ComponentRegistry registry;
 
   private ELF getELF() {
-    return (ELF) registry.getComponent(ELF.class);
+    return registry.getComponent(ELF.class);
   }
 
   public void setupCommands(ComponentRegistry registry, CommandHandler ch) {
     this.registry = registry;
-    final MSP430 cpu = (MSP430) registry.getComponent(MSP430.class);
+    final MSP430 cpu = registry.getComponent(MSP430.class);
     final GenericNode node = (GenericNode) registry.getComponent("node");
     final CheckpointValidator chv = (CheckpointValidator) registry.getComponent("checkpointing");
 
@@ -127,7 +127,7 @@ public class DebugCommands implements CommandBundle {
           monitor = new CPUMonitor() {
               public void cpuAction(int type, int adr, int data) {
                   if (mode == 0 || mode == 10) {
-                      int pc = cpu.readRegister(0);
+                      int pc = cpu.getPC();
                       String adrStr = getSymOrAddr(cpu, context, adr);
                       String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
                       String op = "op";
@@ -262,7 +262,7 @@ public class DebugCommands implements CommandBundle {
           monitor = new CPUMonitor() {
             public void cpuAction(int type, int adr, int data) {
               if (mode == 0) {
-                int pc = cpu.readRegister(0);
+                int pc = cpu.getPC();
                 String adrStr = getRegisterName(register);
                 String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
                 context.out.println("*** Write from " + pcStr +
@@ -341,7 +341,7 @@ public class DebugCommands implements CommandBundle {
         ch.registerCommand("stop", new BasicCommand("stop the CPU", "") {
           public int executeCommand(CommandContext context) {
             node.stop();
-            context.out.println("CPU stopped at: $" + cpu.getAddressAsString(cpu.readRegister(0)));
+            context.out.println("CPU stopped at: $" + cpu.getAddressAsString(cpu.getPC()));
             return 0;
           }
         });
@@ -370,7 +370,7 @@ public class DebugCommands implements CommandBundle {
             } catch (Exception e) {
               e.printStackTrace(context.out);
             }
-            context.out.println("CPU stepped to: $" + cpu.getAddressAsString(cpu.readRegister(0)) +
+            context.out.println("CPU stepped to: $" + cpu.getAddressAsString(cpu.getPC()) +
                 " in " + (cpu.cycles - cyc) + " cycles (" + cpu.cycles + ")");
             return 0;
           }
@@ -389,7 +389,7 @@ public class DebugCommands implements CommandBundle {
             } catch (Exception e) {
               e.printStackTrace(context.out);
             }
-            context.out.println("CPU stepped to: $" + cpu.getAddressAsString(cpu.readRegister(0)) +
+            context.out.println("CPU stepped to: $" + cpu.getAddressAsString(cpu.getPC()) +
                 " in " + (cpu.cycles - cyc) + " cycles (" + cpu.cycles + ") - next exec time: " + nxt);
             return 0;
           }
@@ -399,8 +399,8 @@ public class DebugCommands implements CommandBundle {
           public int executeCommand(CommandContext context) {
             int stackEnd = context.getMapTable().heapStartAddress;
             int stackStart = context.getMapTable().stackStartAddress;
-            int current = cpu.readRegister(MSP430Constants.SP);
-            context.out.println("Current stack: $" + cpu.getAddressAsString(current) + " (" + (stackStart - current) + " used of " + (stackStart - stackEnd) + " B)");
+            int current = cpu.getSP();
+            context.out.println("Current stack: $" + cpu.getAddressAsString(current) + " (" + (stackStart - current) + " used of " + (stackStart - stackEnd) + ')');
 
             for (int i = stackStart-2; i >= current ; i -= 2) {
               context.out.println(" 0x" + Utils.hex16(i) + " = " +
@@ -443,7 +443,7 @@ public class DebugCommands implements CommandBundle {
           public int executeCommand(CommandContext context) {
             int register = context.getArgumentAsRegister(0);
             if (register >= 0) {
-              context.out.println(context.getArgument(0) + " = $" + Utils.hex16(cpu.readRegister(register)));
+              context.out.println(context.getArgument(0) + " = $" + Utils.hex16(cpu.getRegister(register)));
               return 0;
             }
             return -1;
