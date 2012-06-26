@@ -49,7 +49,17 @@ import se.sics.mspsim.util.Utils;
 
 public class MSP430f2617Config extends MSP430Config {
 
-    
+    private static final String portConfig[] = {
+        "P1=0,IN 20,OUT 21,DIR 22,IFG 23,IES 24,IE 25,SEL 26,SEL2 41,REN 27",
+        "P2=0,IN 28,OUT 29,DIR 2A,IFG 2B,IES 2C,IE 2D,SEL 2E,SEL2 42,REN 2F",
+        "P3=0,IN 18,OUT 19,DIR 1A,SEL 1B,SEL2 43,REN 10",
+        "P4=0,IN 1C,OUT 1D,DIR 1E,SEL 1F,SEL2 44,REN 11",
+        "P5=0,IN 30,OUT 31,DIR 32,SEL 33,SEL2 45,REN 12",
+        "P6=0,IN 34,OUT 35,DIR 36,SEL 37,SEL2 46,REN 13",
+        "P7=0,IN 38,OUT 3A,DIR 3C,SEL 3E,SEL2 47,REN 14",
+        "P8=0,IN 39,OUT 3B,DIR 3D,SEL 3F,SEL2 48,REN 15"
+    };
+
     public MSP430f2617Config() {
         /* 32 vectors for the MSP430X series */
         maxInterruptVector = 31;
@@ -62,42 +72,36 @@ public class MSP430f2617Config extends MSP430Config {
 
         /* TX Vec, RX Vec, TX Bit, RX Bit, SFR-reg, Offset, Name, A?*/
         UARTConfig uA0 = new UARTConfig(22, 23, 1, 0, 1, 0x60, "USCI A0", true);
-        UARTConfig uB0 = new UARTConfig(22, 23, 3, 2, 1, 0x60, "USCI B0", false);
+        UARTConfig uB0 = new UARTConfig(22, 23, 3, 2, 1, 0x68, "USCI B0", false);
         UARTConfig uA1 = new UARTConfig(16, 17, 1, 0, 6, 0xD0, "USCI A1", true);
-        UARTConfig uB1 = new UARTConfig(16, 17, 3, 2, 6, 0xD0, "USCI B1", false);
+        UARTConfig uB1 = new UARTConfig(16, 17, 3, 2, 6, 0xD8, "USCI B1", false);
         uartConfig = new UARTConfig[] {uA0, uB0, uA1, uB1};
+
+        /* configure memory */
+        infoMemConfig(0x1000, 128 * 2);
+        mainFlashConfig(0x3100, 92 * 1024);
+        ramConfig(0x1100, 8 * 1024);
     }
 
     public int setup(MSP430Core cpu, ArrayList<IOUnit> ioUnits) {
 
         Multiplier mp = new Multiplier(cpu, cpu.memory, 0);
-        // Only cares of writes!
-        for (int i = 0x130, n = 0x13f; i < n; i++) {
-          cpu.memOut[i] = mp;
-          cpu.memIn[i] = mp;
-        }
-        
+        cpu.setIORange(0x130, 0x0f, mp);
+
         USCI usciA0 = new USCI(cpu, 0, cpu.memory, this);
         USCI usciB0 = new USCI(cpu, 1, cpu.memory, this);
         USCI usciA1 = new USCI(cpu, 2, cpu.memory, this);
         USCI usciB1 = new USCI(cpu, 3, cpu.memory, this);
-        
-        for (int i = 0, n = 8; i < n; i++) {
-            cpu.memOut[0x60 + i] = usciA0;
-            cpu.memIn[0x60 + i] = usciA0;
-            cpu.memOut[0x68 + i] = usciB0;
-            cpu.memIn[0x68 + i] = usciB0;
+        cpu.setIORange(0x60, 8, usciA0);
+        cpu.setIORange(0x68, 8, usciB0);
+        cpu.setIORange(0xd0, 8, usciA1);
+        cpu.setIORange(0xd8, 8, usciB1);
 
-            cpu.memOut[0xd0 + i] = usciA1;
-            cpu.memIn[0xd0 + i] = usciA1;
-            cpu.memOut[0xd8 + i] = usciB1;
-            cpu.memIn[0xd8 + i] = usciB1;
-          }
         /* usciBx for i2c mode */
-        cpu.setIO(0x118, usciB0, true);
-        cpu.setIO(0x11a, usciB0, true);
-        cpu.setIO(0x17c, usciB1, true);
-        cpu.setIO(0x17e, usciB1, true);
+        cpu.setIORange(0x118, 2, usciB0);
+        cpu.setIORange(0x11a, 2, usciB0);
+        cpu.setIORange(0x17c, 2, usciB1);
+        cpu.setIORange(0x17e, 2, usciB1);
 
         ioUnits.add(usciA0);
         ioUnits.add(usciB0);
@@ -105,66 +109,25 @@ public class MSP430f2617Config extends MSP430Config {
         ioUnits.add(usciB1);
         
         /* usciA1 handles interrupts for both usciA1 and B1 */
-        cpu.memOut[6] = usciA1;
-        cpu.memIn[6] = usciA1;
-        cpu.memOut[7] = usciA1;
-        cpu.memIn[7] = usciA1;
+        cpu.setIORange(0x06, 2, usciA1);
 
         // Add port 1,2 with interrupt capability!
-        IOPort io1;
-        IOPort io2;
-        ioUnits.add(io1 = new IOPort(cpu, 1, 4, cpu.memory, 0x20));
-        ioUnits.add(io2 = new IOPort(cpu, 2, 1, cpu.memory, 0x28));
-        for (int i = 0, n = 8; i < n; i++) {
-          cpu.memOut[0x20 + i] = io1;
-          cpu.memOut[0x28 + i] = io2;
-          cpu.memIn[0x20 + i] = io1;
-          cpu.memIn[0x28 + i] = io2;
+        // IOPorts will add themselves to the CPU
+        IOPort last = null;
+        ioUnits.add(last = IOPort.parseIOPort(cpu, 18, portConfig[0], last));
+        ioUnits.add(last = IOPort.parseIOPort(cpu, 19, portConfig[1], last));
+
+        for (int i = 2; i < portConfig.length; i++) {
+            ioUnits.add(last = IOPort.parseIOPort(cpu, 0, portConfig[i], last));
         }
 
-        // Add port 3,4 & 5,6
-        for (int i = 0, n = 2; i < n; i++) {
-          IOPort p = new IOPort(cpu, (3 + i), 0, cpu.memory, 0x18 + i * 4);
-          ioUnits.add(p);
-          cpu.memOut[0x18 + i * 4] = p;
-          cpu.memOut[0x19 + i * 4] = p;
-          cpu.memOut[0x1a + i * 4] = p;
-          cpu.memOut[0x1b + i * 4] = p;
-          cpu.memIn[0x18 + i * 4] = p;
-          cpu.memIn[0x19 + i * 4] = p;
-          cpu.memIn[0x1a + i * 4] = p;
-          cpu.memIn[0x1b + i * 4] = p;
-        }
-
-        for (int i = 0, n = 2; i < n; i++) {
-          IOPort p = new IOPort(cpu, (5 + i), 0, cpu.memory, 0x30 + i * 4);
-          ioUnits.add(p);
-          cpu.memOut[0x30 + i * 4] = p;
-          cpu.memOut[0x31 + i * 4] = p;
-          cpu.memOut[0x32 + i * 4] = p;
-          cpu.memOut[0x33 + i * 4] = p;
-          cpu.memIn[0x30 + i * 4] = p;
-          cpu.memIn[0x31 + i * 4] = p;
-          cpu.memIn[0x32 + i * 4] = p;
-          cpu.memIn[0x33 + i * 4] = p;
-        }
-        
         ADC12 adc12 = new ADC12(cpu);
         ioUnits.add(adc12);
+        cpu.setIORange(0x080, 16, adc12);
+        cpu.setIORange(0x140, 16, adc12);
+        cpu.setIORange(0x150, 16, adc12);
+        cpu.setIORange(0x1a0,  8, adc12);
 
-        for (int i = 0, n = 16; i < n; i++) {
-            cpu.memOut[0x80 + i] = adc12;
-            cpu.memIn[0x80 + i] = adc12;
-            cpu.memOut[0x140 + i] = adc12;
-            cpu.memIn[0x140 + i] = adc12;
-            cpu.memOut[0x150 + i] = adc12;
-            cpu.memIn[0x150 + i] = adc12;
-        }
-        for (int i = 0, n = 8; i < n; i++) {    
-            cpu.memOut[0x1A0 + i] = adc12;
-            cpu.memIn[0x1A0 + i] = adc12;
-        }
-        
         /* 4 usci units + 6 io port*/
         return 4 + 6;
     }

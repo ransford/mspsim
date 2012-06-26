@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * MSP430
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
@@ -52,15 +48,14 @@ import edu.umass.energy.EnergyFairy;
 
 public class MSP430 extends MSP430Core {
 
-  public static final int RETURN = 0x4130;
-  
   private int[] execCounter;
   private int[] trace;
   private int tracePos;
   
   private boolean debug = false;
   private boolean running = false;
-  private long sleepRate = 50000;
+  private boolean isBreaking = false;
+  private double rate = 2.0;
 
   // Debug time - measure cycles
   private long lastCycles = 0;
@@ -71,7 +66,6 @@ public class MSP430 extends MSP430Core {
 
   private double lastCPUPercent = 0d;
 
-  private long instCtr = 0;
   private DisAsm disAsm;
 
   private SimEventListener[] simEventListeners;
@@ -121,34 +115,25 @@ public class MSP430 extends MSP430Core {
       throw new IllegalStateException("already running");
     }
     setRunning(true);
-    // ??? - power-up  should be executed?!
-    time = System.currentTimeMillis();
-    run();
-    setRunning(false);
+    try {
+        // ??? - power-up  should be executed?!
+        time = System.currentTimeMillis();
+        run();
+    } finally {
+        setRunning(false);
+    }
   }
 
   private void run() throws EmulationException {
-      int pc;
-      while (isRunning()) {
-      // -------------------------------------------------------------------
-      // Debug information
-      // -------------------------------------------------------------------
-      if (debug) {
-	if (servicedInterrupt >= 0) {
-	  disAsm.disassemble(reg[PC], memory, reg, servicedInterrupt);
-	} else {
-	  disAsm.disassemble(reg[PC], memory, reg);
-	}
-      }
+      while (!isStopping) {
 
       if (cycles > nextOut && !debug) {
 	printCPUSpeed(reg[PC]);
 	nextOut = cycles + 20000007;
       }
 
-      if ((pc = emulateOP(-1)) >= 0) {
-	instCtr++;
-
+      int pc = emulateOP(-1);
+      if (pc >= 0) {
 	if (execCounter != null) {
 	  execCounter[pc]++;
 	}
@@ -157,23 +142,34 @@ public class MSP430 extends MSP430Core {
 	    if (tracePos >= trace.length)
 		tracePos = 0;
 	}
+	// -------------------------------------------------------------------
+	// Debug information
+	// -------------------------------------------------------------------
+	if (debug) {
+	    if (servicedInterrupt >= 0) {
+	        disAsm.disassemble(pc, memory, reg, servicedInterrupt);
+	    } else {
+	        disAsm.disassemble(pc, memory, reg);
+	    }
+	}
       }
 
       /* Just a test to see if it gets down to a reasonable speed */
       if (cycles > nextSleep) {
 	try {
-	  Thread.sleep(10);
+	  Thread.sleep(100);
 	} catch (Exception e) {
 	}
 	// Frequency = 100 * cycles ratio
 	// Ratio = Frq / 100
-	nextSleep = cycles + sleepRate;
+	nextSleep = cycles + (long)(rate * dcoFrq / 10);
       }
 
 //       if ((instruction & 0xff80) == CALL) {
 // 	System.out.println("Call to PC = " + reg[PC]);
 //       }
     }
+    isStopping = isBreaking = false;
   }
 
   public long step() throws EmulationException {
@@ -185,13 +181,8 @@ public class MSP430 extends MSP430Core {
       throw new IllegalStateException("step not possible when CPU is running");
     }
     setRunning(true);
-    // -------------------------------------------------------------------
-    // Debug information
-    // -------------------------------------------------------------------
-
-
-    while (count-- > 0 && isRunning()) {
-
+    try {
+    while (count-- > 0 && !isStopping) {
       int pc = emulateOP(-1);
       if (pc >= 0) {
         if (execCounter != null) {
@@ -202,16 +193,23 @@ public class MSP430 extends MSP430Core {
   	  if (tracePos >= trace.length)
   	      tracePos = 0;
         }
-      }
-      if (debug) {
-          if (servicedInterrupt >= 0) {
-              disAsm.disassemble(reg[PC], memory, reg, servicedInterrupt);
-          } else {
-              disAsm.disassemble(reg[PC], memory, reg);
-          }
+
+        // -------------------------------------------------------------------
+        // Debug information
+        // -------------------------------------------------------------------
+        if (debug) {
+            if (servicedInterrupt >= 0) {
+                disAsm.disassemble(pc, memory, reg, servicedInterrupt);
+            } else {
+                disAsm.disassemble(pc, memory, reg);
+            }
+        }
       }
     }
-    setRunning(false);
+    } finally { 
+        setRunning(false);
+    }
+    isStopping = isBreaking = false;
     return cycles;
   }
   
@@ -234,14 +232,12 @@ public class MSP430 extends MSP430Core {
    */
   long maxCycles = 0;
   public long stepMicros(long jumpMicros, long executeMicros) throws EmulationException {
-    int pc;
     if (isRunning()) {
       throw new IllegalStateException("step not possible when CPU is running");
     }
 
     if (jumpMicros < 0) {
-      throw new IllegalArgumentException("Can not jump a negative time: " +
-          jumpMicros);
+      throw new IllegalArgumentException("Can not jump a negative time: " + jumpMicros);
     }
     /* quick hack - if microdelta == 0 => ensure that we have correct zery cycles
      */
@@ -280,7 +276,8 @@ public class MSP430 extends MSP430Core {
 
 
     while (cycles < maxCycles || (cpuOff && (nextEventCycles < cycles))) {
-        if ((pc = emulateOP(maxCycles)) >= 0) {
+        int pc = emulateOP(maxCycles);
+        if (pc >= 0) {
             if (execCounter != null) {
                 execCounter[pc]++;
             }
@@ -301,6 +298,20 @@ public class MSP430 extends MSP430Core {
               }
             }
         }
+
+        if (isStopping) {
+            isStopping = false;
+            if (cycles < maxCycles || (cpuOff && (nextEventCycles < cycles))) {
+                // Did not complete the execution cycle
+                lastMicrosDelta -= jumpMicros;
+            }
+            if (isBreaking) {
+                isBreaking = false;
+                throw new BreakpointException();
+            }
+            lastReturnedMicros = 0;
+            return 0;
+        }
     }
 
     if (cpuOff && !(interruptsEnabled && servicedInterrupt == -1 && interruptMax >= 0)) {
@@ -318,9 +329,14 @@ public class MSP430 extends MSP430Core {
 
     return lastReturnedMicros;
   }
-  
+
   public void stop() {
-    setRunning(false);
+      isStopping = true;
+  }
+
+  public void triggBreakpoint() {
+      isBreaking = true;
+      stop();
   }
 
   public int getDCOFrequency() {
@@ -416,9 +432,13 @@ public class MSP430 extends MSP430Core {
     }
   }
 
-  public void setRunning(boolean running) {
+  private void setRunning(boolean running) {
     if (this.running != running) {
       this.running = running;
+      if (running) {
+          isStopping = false;
+          isBreaking = false;
+      }
       SimEventListener[] listeners = this.simEventListeners;
       if (listeners != null) {
         SimEvent.Type type = running ? SimEvent.Type.START : SimEvent.Type.STOP;
@@ -434,21 +454,20 @@ public class MSP430 extends MSP430Core {
     return running;
   }
 
-  public long getSleepRate() {
-    return sleepRate;
+  public double getExecutionRate() {
+    return rate;
   }
 
-  public void setSleepRate(long rate) {
-    sleepRate = rate;
+  public void setExecutionRate(double rate) {
+    this.rate = rate;
   }
 
   public synchronized void addSimEventListener(SimEventListener l) {
-    simEventListeners = (SimEventListener[]) ArrayUtils.add(SimEventListener.class, simEventListeners, l);
+    simEventListeners = ArrayUtils.add(SimEventListener.class, simEventListeners, l);
   }
 
   public synchronized void removeSimEventListener(SimEventListener l) {
-    simEventListeners = (SimEventListener[]) ArrayUtils.remove(simEventListeners, l);
+    simEventListeners = ArrayUtils.remove(simEventListeners, l);
   }
 
-  
 }

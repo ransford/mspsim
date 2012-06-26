@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007, Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * USART
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
@@ -82,7 +78,7 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
   public static final int UTCTL_TXEMPTY = 0x01;
   public static final int UTCTL_URXSE = 0x08;
 
-  private USARTListener listener;
+  private USARTListener usartListener;
 
   private int utxifg;
   private int urxifg;
@@ -95,9 +91,10 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
   private int nextTXByte = -1;
   private int txShiftReg = -1;
   private boolean transmitting = false;
-  
-  private MSP430Core cpu;
-  private SFR sfr;
+  private int nextRXByte = -1;
+  private boolean receiving = false;
+
+  private final SFR sfr;
 
   private int uctl;
   private int utctl;
@@ -115,7 +112,6 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
   
   /* DMA controller that needs to be called at certain times */
   private DMA dma;
-  private int dmaIndex;
   
   private TimeEvent txTrigger = new TimeEvent(0) {
     public void execute(long t) {
@@ -123,14 +119,19 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
         handleTransmit(t);
     }
   };
-  
+
+  private TimeEvent rxTrigger = new TimeEvent(0) {
+      public void execute(long t) {
+          handleReceive();
+      }
+  };
+
   /**
    * Creates a new <code>USART</code> instance.
    *
    */
   public USART(MSP430Core cpu, int uartID, int[] memory, int offset) {
-    super("USART" + uartID, "USART " + uartID, memory, offset);
-    this.cpu = cpu;
+    super("USART" + uartID, "USART " + uartID, cpu, memory, offset);
     this.uartID = uartID;
     sfr = cpu.getSFR();
 
@@ -208,8 +209,14 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
     return sfr.isIEBitsSet(uartID, bits);
   }
 
-  public void setUSARTListener(USARTListener listener) {
-    this.listener = listener;
+  @Override
+  public synchronized void addUSARTListener(USARTListener listener) {
+      usartListener = USARTListener.Proxy.INSTANCE.add(usartListener, listener);
+  }
+
+  @Override
+  public synchronized void removeUSARTListener(USARTListener listener) {
+      usartListener = USARTListener.Proxy.INSTANCE.remove(usartListener, listener);
   }
 
   // Only 8 bits / read!
@@ -266,7 +273,7 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
       updateBaudRate();
       break;
     case UTXBUF:
-      if (DEBUG) log(": USART_UTXBUF:" + (char) data + " = " + data + "\n");
+      if (DEBUG) log(" USART_UTXBUF: " + data + " " + (data > 32 ? (char)data : '.'));
       if (txEnabled || (spiMode && rxEnabled)) {
         // Interruptflag not set!
         clrBitIFG(utxifg);
@@ -366,11 +373,12 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
 
   private void handleTransmit(long cycles) {
     if (cpu.getMode() >= MSP430Core.MODE_LPM3) {
-      System.out.println(getName() + " Warning: USART transmission during LPM!!! " + nextTXByte);
+      logw("Warning: USART transmission during LPM!!! " + nextTXByte);
     }
 
     if (transmitting) {
         /* in this case we have shifted out the last character */
+        USARTListener listener = this.usartListener;
         if (listener != null && txShiftReg != -1) {
             listener.dataReceived(this, txShiftReg);
         }
@@ -387,9 +395,9 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
     if (nextTXByte != -1) {
         txShiftReg = nextTXByte;
         nextTXByte = -1;
+        transmitting = true;
         /* txbuf always empty after this */
         setBitIFG(utxifg);
-        transmitting = true;
         nextTXReady = cycles + tickPerByte + 1;
         cpu.scheduleCycleEvent(txTrigger, nextTXReady);
     }
@@ -404,7 +412,7 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
 
 
   public boolean isReceiveFlagCleared() {
-    return (getIFG() & urxifg) == 0;
+    return !receiving && (getIFG() & urxifg) == 0;
   }
 
   // A byte have been received!
@@ -412,25 +420,35 @@ public class USART extends IOUnit implements SFRModule, DMATrigger, USARTSource 
   // is ready for next byte (readyForReceive) that respects the current speed
   public void byteReceived(int b) {
     if (!rxEnabled) return;
-    
     if (DEBUG) {
-      log(" byteReceived: " + b + " " + (char) b);
+      log(" byteReceived: " + b + " " + (b > 32 ? (char)b : '.'));
     }
-    urxbuf = b & 0xff;
-    // Indicate interrupt also!
+    nextRXByte = b & 0xff;
+    if (!receiving) {
+      receiving = true;
+      cpu.scheduleCycleEvent(rxTrigger, cpu.cycles + 1);
+    }
+  }
+
+  private void handleReceive() {
+    receiving = false;
+    urxbuf = nextRXByte;
+
+    // Indicate interrupt!
     setBitIFG(urxifg);
 
-    // Check if the IE flag is enabled! - same as the IFlag to indicate!
-    if (isIEBitsSet(urxifg)) {
-      if (DEBUG) {
+    if (DEBUG) {
+      // Check if the IE flag is enabled! - same as the IFlag to indicate!
+      if (isIEBitsSet(urxifg)) {
         log(" flagging receive interrupt ");
       }
     }
   }
-  
+
   public String info() {
-      return "UTXIE: " + isIEBitsSet(utxifg) + "  URXIE:" + isIEBitsSet(urxifg) + "\n" +
-      "UTXIFG: " + ((getIFG() & utxifg) > 0) + "  URXIFG:" + ((getIFG() & urxifg) > 0);
+      return "  UTXIE: " + isIEBitsSet(utxifg) + "  URXIE: " + isIEBitsSet(urxifg) + "\n" +
+      "  UTXIFG: " + ((getIFG() & utxifg) > 0) + "  URXIFG: " + ((getIFG() & urxifg) > 0) + "\n" +
+      "  Baudrate: " + baudRate + " bps  Cycles per byte: " + tickPerByte;
   }
 
   public boolean getDMATriggerState(int index) {

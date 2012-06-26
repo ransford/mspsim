@@ -44,8 +44,6 @@ package se.sics.mspsim.chip;
 
 import se.sics.mspsim.core.Chip;
 import se.sics.mspsim.core.MSP430Core;
-import se.sics.mspsim.core.StateChangeListener;
-import se.sics.mspsim.util.ArrayUtils;
 import se.sics.mspsim.util.Utils;
 
 public class Leds extends Chip {
@@ -53,7 +51,6 @@ public class Leds extends Chip {
     private final int[] ledColors;
 
     private int leds;
-    private StateChangeListener[] stateListeners;
 
     public Leds(MSP430Core cpu, int[] ledColors) {
         super("Leds", cpu);
@@ -69,10 +66,17 @@ public class Leds extends Chip {
 
     public void setLeds(int leds) {
         if (this.leds != leds) {
-            int oldLeds = this.leds;
             this.leds = leds;
-            fireStateChanged(oldLeds, leds);
+            stateChanged(leds);
             if (DEBUG) log(ledColors.length <= 8 ? Utils.binary8(leds) : Utils.binary16(leds));
+        }
+    }
+
+    public void setLeds(int leds, boolean on) {
+        if (on) {
+            setLeds(this.leds | leds);
+        } else {
+            setLeds(this.leds & ~leds);
         }
     }
 
@@ -80,29 +84,13 @@ public class Leds extends Chip {
         return (leds & (1 << led)) != 0;
     }
 
+
     public int getLedsColor(int led) {
         return ledColors[led];
     }
 
     public int getLedsCount() {
         return ledColors.length;
-    }
-
-    private void fireStateChanged(int oldState, int newState) {
-        StateChangeListener[] listeners = this.stateListeners;
-        if (listeners != null) {
-            for(StateChangeListener listener : listeners) {
-                listener.stateChanged(this, oldState, newState);
-            }
-        }
-    }
-
-    public synchronized void addStateChangeListener(StateChangeListener l) {
-        this.stateListeners = (StateChangeListener[]) ArrayUtils.add(StateChangeListener.class, this.stateListeners, l);
-    }
-
-    public synchronized void removeStateChangeListener(StateChangeListener l) {
-        this.stateListeners = (StateChangeListener[]) ArrayUtils.remove(this.stateListeners, l);
     }
 
     public int getModeMax() {

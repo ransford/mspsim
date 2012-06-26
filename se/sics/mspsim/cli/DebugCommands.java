@@ -33,9 +33,6 @@
  * Created : Mon Feb 11 2008
  */
 package se.sics.mspsim.cli;
-import java.io.IOException;
-
-import se.sics.mspsim.core.CPUMonitor;
 import se.sics.mspsim.core.DbgInstruction;
 import se.sics.mspsim.core.DisAsm;
 import se.sics.mspsim.core.EmulationException;
@@ -43,6 +40,10 @@ import se.sics.mspsim.core.Loggable;
 import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.core.MSP430Constants;
 import se.sics.mspsim.core.Memory;
+import se.sics.mspsim.core.Memory.AccessMode;
+import se.sics.mspsim.core.Memory.AccessType;
+import se.sics.mspsim.core.MemoryMonitor;
+import se.sics.mspsim.core.RegisterMonitor;
 import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.util.ComponentRegistry;
 import se.sics.mspsim.util.DebugInfo;
@@ -64,24 +65,29 @@ public class DebugCommands implements CommandBundle {
   public void setupCommands(ComponentRegistry registry, CommandHandler ch) {
     this.registry = registry;
     final MSP430 cpu = registry.getComponent(MSP430.class);
-    final GenericNode node = (GenericNode) registry.getComponent("node");
-    final CheckpointValidator chv = (CheckpointValidator) registry.getComponent("checkpointing");
-
+    final GenericNode node = registry.getComponent(GenericNode.class, "node");
+    final CheckpointValidator chv =
+        registry.getComponent(CheckpointValidator.class, "checkpointing");
     if (cpu != null) {
       ch.registerCommand("break", new BasicAsyncCommand("add a breakpoint to a given address or symbol",
           "<address or symbol>") {
         private int address;
-        private CPUMonitor monitor;
+        private MemoryMonitor monitor;
         public int executeCommand(final CommandContext context) {
           address = context.getArgumentAsAddress(0);
           if (address < 0) {
             context.err.println("unknown symbol: " + context.getArgument(0));
             return 1;
           }
-          monitor = new CPUMonitor() {
-              public void cpuAction(int type, int adr, int data) {
-                  context.out.println("*** Break at $" + cpu.getAddressAsString(adr));
-                  cpu.stop();
+          monitor = new MemoryMonitor.Adapter() {
+              private long lastCycles = -1;
+              @Override
+              public void notifyReadBefore(int address, AccessMode mode, AccessType type) {
+                  if (type == AccessType.EXECUTE && cpu.cycles != lastCycles) {
+                      context.out.println("*** Break at $" + cpu.getAddressAsString(address));
+                      cpu.triggBreakpoint();
+                      lastCycles = cpu.cycles;
+                  }
               }
           };
           cpu.addWatchPoint(address, monitor);
@@ -99,7 +105,7 @@ public class DebugCommands implements CommandBundle {
         int mode = 0;
         int address = 0;
         int length = 1;
-        CPUMonitor monitor;
+        MemoryMonitor monitor;
         public int executeCommand(final CommandContext context) {
           address = context.getArgumentAsAddress(0);
           if (address < 0) {
@@ -124,27 +130,28 @@ public class DebugCommands implements CommandBundle {
               context.err.println("please specify a length of at least one byte");
               return -1;
           }
-          monitor = new CPUMonitor() {
-              public void cpuAction(int type, int adr, int data) {
+          monitor = new MemoryMonitor.Adapter() {
+              private void cpuAction(AccessType type, int adr, int data) {
                   if (mode == 0 || mode == 10) {
                       int pc = cpu.getPC();
                       String adrStr = getSymOrAddr(cpu, context, adr);
                       String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
                       String op = "op";
-                      if (type == MEMORY_READ) {
+                      if (type == AccessType.READ) {
                           op = "Read";
-                      } else if (type == MEMORY_WRITE){
+                      } else if (type == AccessType.WRITE){
                           op = "Write";
                       }
                       context.out.println("*** " + op + " from " + pcStr +
-                              ": " + adrStr + " = " + data);
+                              ": " + adrStr + " = 0x" + Utils.hex(data, 4));
                       if (mode == 10) {
-                          cpu.stop();
+                          cpu.triggBreakpoint();
                       }
                   } else {
                       if (length > 1) {
+                          Memory mem = cpu.getMemory();
                           for (int i = address; i < address + length; i++) {
-                              context.out.print(Utils.toString(cpu.memory[i], Utils.BYTE, mode));
+                              context.out.print(Utils.toString(mem.get(i, AccessMode.BYTE), Utils.BYTE, mode));
                           }
                           context.out.println();
                       } else {
@@ -152,6 +159,15 @@ public class DebugCommands implements CommandBundle {
                       }
                   }
               }
+
+            @Override
+            public void notifyReadBefore(int addr, AccessMode mode, AccessType type) {
+                cpuAction(AccessType.READ, addr, cpu.getMemory().get(addr, mode));
+            }
+            @Override
+            public void notifyWriteBefore(int dstAddress, int data, AccessMode mode) {
+                cpuAction(AccessType.WRITE, dstAddress, data);
+            }
           };
 
           for (int i = 0; i < length; i++) {
@@ -242,9 +258,9 @@ public class DebugCommands implements CommandBundle {
       
       ch.registerCommand("watchreg",
           new BasicAsyncCommand("add a write watch to a given register", "<register> [int]") {
-        int mode = 0;
+        int watchMode = 0;
         int register = 0;
-        CPUMonitor monitor;
+        RegisterMonitor monitor;
         public int executeCommand(final CommandContext context) {
           register = context.getArgumentAsRegister(0);
           if (register < 0) {
@@ -253,23 +269,24 @@ public class DebugCommands implements CommandBundle {
           if (context.getArgumentCount() > 1) {
             String modeStr = context.getArgument(1);
             if ("int".equals(modeStr)) {
-              mode = 1;
+              watchMode = 1;
             } else {
               context.err.println("illegal argument: " + modeStr);
               return -1;
             }
           }
-          monitor = new CPUMonitor() {
-            public void cpuAction(int type, int adr, int data) {
-              if (mode == 0) {
-                int pc = cpu.getPC();
-                String adrStr = getRegisterName(register);
-                String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
-                context.out.println("*** Write from " + pcStr +
-                    ": " + adrStr + " = " + data);
-              } else {
-                context.err.println(data);
-              }
+          monitor = new RegisterMonitor.Adapter() {
+            @Override
+            public void notifyWriteBefore(int register, int data, int mode) {
+                if (watchMode == 0) {
+                    int pc = cpu.getPC();
+                    String adrStr = getRegisterName(register);
+                    String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
+                    context.out.println("*** Write from " + pcStr +
+                            ": " + adrStr + " = " + data);
+                } else {
+                    context.out.println(data);
+                }
             }
           };
           cpu.addRegisterWriteMonitor(register, monitor);
@@ -299,10 +316,15 @@ public class DebugCommands implements CommandBundle {
           } else {
               for (MapEntry mapEntry : entries) {
                   int address = mapEntry.getAddress();
-                  context.out.println(" " + mapEntry.getName() + " at $" +
-                          cpu.getAddressAsString(address) + " (" + Utils.hex8(cpu.memory[address]) +
-                          " " + Utils.hex8(cpu.memory[address + 1]) + ") " + mapEntry.getType() +
-                          " in file " + mapEntry.getFile());
+                  String file = mapEntry.getFile();
+                  if (file == null) {
+                      file = "(unspecified)";
+                  }
+                  context.out.println(" " + mapEntry.getName() + " at $"
+                          + cpu.getAddressAsString(address) + " ($"
+                          + Utils.hex8(cpu.getMemory().get(address, AccessMode.BYTE))
+                          + ' ' + Utils.hex8(cpu.getMemory().get(address + 1, AccessMode.BYTE)) + ") "
+                          + mapEntry.getType() + " in file " + file);
               }
           }
           return 0;
@@ -347,6 +369,10 @@ public class DebugCommands implements CommandBundle {
         });
         ch.registerCommand("start", new BasicCommand("start the CPU", "") {
           public int executeCommand(CommandContext context) {
+            if (cpu.isRunning()) {
+                context.err.println("cpu already running");
+                return 1;
+            }
             node.start();
             return 0;
           }
@@ -428,11 +454,11 @@ public class DebugCommands implements CommandBundle {
           public int executeCommand(CommandContext context) {
             int adr = context.getArgumentAsAddress(0);
             if (adr >= 0) {
-              try {
-                context.out.println(context.getArgument(0) + " = $" + Utils.hex16(cpu.read(adr, adr >= 0x100 ? MSP430Constants.MODE_WORD : MSP430Constants.MODE_BYTE)));
-              } catch (Exception e) {
-                e.printStackTrace(context.err);
+              int value = cpu.memory[adr];
+              if (adr >= 0x100 && adr + 1 < cpu.MAX_MEM) {
+                  value |= cpu.memory[adr + 1] << 8;
               }
+              context.out.println(context.getArgument(0) + " = $" + Utils.hex16(value));
               return 0;
             }
             context.err.println("unknown symbol: " + context.getArgument(0));
@@ -443,7 +469,7 @@ public class DebugCommands implements CommandBundle {
           public int executeCommand(CommandContext context) {
             int register = context.getArgumentAsRegister(0);
             if (register >= 0) {
-              context.out.println(context.getArgument(0) + " = $" + Utils.hex16(cpu.getRegister(register)));
+              context.out.println(context.getArgument(0) + " = $" + Utils.hex(cpu.getRegister(register), 4));
               return 0;
             }
             return -1;
@@ -587,17 +613,18 @@ public class DebugCommands implements CommandBundle {
             for (int i = typeRead ? 2 : 1; i < count; i++) {
               if (mode == Utils.DEC) {
                 int val = context.getArgumentAsInt(i);
-                boolean word = Utils.size(type) == 2 | val > 0xff;
+                AccessMode accessMode = Utils.size(type) == 2 || val > 0xff ? AccessMode.WORD : AccessMode.BYTE;
                 try {
-                  cpu.write(adr, val, word ? MSP430Constants.MODE_WORD : MSP430Constants.MODE_BYTE);
-                  adr += word ? 2 : 1;
+                  cpu.getMemory().set(adr, val, accessMode);
+                  adr += accessMode.bytes;
                 } catch (EmulationException e) {
                   e.printStackTrace(context.out);
                 }
               } else if (mode == Utils.ASCII) {
                 String data = context.getArgument(i);
+                Memory mem = cpu.getMemory();
                 for (int j = 0; j < data.length(); j++) {
-                  cpu.write(adr++, data.charAt(j) & 0xff, MSP430Constants.MODE_WORD);
+                  mem.set(adr++, data.charAt(j), AccessMode.BYTE);
                 }
               }
             }
@@ -609,7 +636,7 @@ public class DebugCommands implements CommandBundle {
          ******************************************************/
         ch.registerCommand("xmem", new BasicCommand("dump flash memory", "<start address> <num_entries> [type]") {
           public int executeCommand(final CommandContext context) {
-            Memory xmem = (Memory) DebugCommands.this.registry.getComponent("xmem");
+            se.sics.mspsim.chip.Memory xmem = DebugCommands.this.registry.getComponent(se.sics.mspsim.chip.Memory.class, "xmem");
             if (xmem == null) {
               context.err.println("No xmem component registered");
               return 0;
@@ -645,7 +672,7 @@ public class DebugCommands implements CommandBundle {
 
         ch.registerCommand("xmset", new BasicCommand("set memory", "<address> <value> [type]") {
           public int executeCommand(final CommandContext context) {
-            Memory xmem = (Memory) DebugCommands.this.registry.getComponent("xmem");
+            se.sics.mspsim.chip.Memory xmem = DebugCommands.this.registry.getComponent(se.sics.mspsim.chip.Memory.class, "xmem");
             if (xmem == null) {
               context.err.println("No xmem component registered");
               return 0;

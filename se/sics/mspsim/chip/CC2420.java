@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007-2011 Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012 Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,13 +37,16 @@
  */
 
 package se.sics.mspsim.chip;
-
-import se.sics.mspsim.core.*;
+import se.sics.mspsim.core.IOPort;
+import se.sics.mspsim.core.MSP430Core;
+import se.sics.mspsim.core.TimeEvent;
+import se.sics.mspsim.core.USARTListener;
+import se.sics.mspsim.core.USARTSource;
 import se.sics.mspsim.util.ArrayFIFO;
 import se.sics.mspsim.util.CCITT_CRC;
 import se.sics.mspsim.util.Utils;
 
-public class CC2420 extends Chip implements USARTListener, RFListener, RFSource {
+public class CC2420 extends Radio802154 implements USARTListener {
 
   public enum Reg {
     SNOP, SXOSCON, STXCAL, SRXON, /* 0x00 */
@@ -261,6 +264,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
   /* current CCA value */
   private boolean cca = false;
 
+  /* This is the magical LQI */
+  private int corrval = 37;
+
   /* FIFOP Threshold */
   private int fifopThr = 64;
 
@@ -306,7 +312,6 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
   private int sfdPin;
 
   private int txCursor;
-  private RFListener listener;
   private boolean on;
 
   private TimeEvent oscillatorEvent = new TimeEvent(0, "CC2420 OSC") {
@@ -681,7 +686,7 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
                   }
                   // Should take a RSSI value as input or use a set-RSSI value...
                   rxFIFO.set(-2, registers[REG_RSSI] & 0xff); 
-                  rxFIFO.set(-1, 37 | (crcOk ? 0x80 : 0));
+                  rxFIFO.set(-1, (corrval & 0x7F) | (crcOk ? 0x80 : 0));
                   //          memory[RAM_RXFIFO + ((rxfifoWritePos + 128 - 2) & 127)] = ;
                   //          // Set CRC ok and add a correlation - TODO: fix better correlation value!!!
                   //          memory[RAM_RXFIFO + ((rxfifoWritePos + 128 - 1) & 127)] = 37 |
@@ -736,12 +741,17 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
           autoCRC = (data & ADR_AUTOCRC) != 0;
           autoAck = (data & AUTOACK) != 0;
           break;
-      case REG_FSCTRL:
-          if (cl != null) {
+      case REG_FSCTRL: {
+          ChannelListener listener = this.channelListener;
+          if (listener != null) {
+              int oldChannel = activeChannel;
               updateActiveFrequency();
-              cl.changedChannel(activeChannel);
+              if (oldChannel != activeChannel) {
+                  listener.channelChanged(activeChannel);
+              }
           }
-        break;
+          break;
+      }
       }
       configurationChanged(address, oldValue, data);
   }
@@ -1048,9 +1058,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
                   stateMachine);
       }
     } else {
-      if (listener != null) {
+      if (rfListener != null) {
         if (DEBUG) log("transmitting byte: " + Utils.hex8(SHR[shrPos]));
-        listener.receivedByte(SHR[shrPos]);
+        rfListener.receivedByte(SHR[shrPos]);
       }
       shrPos++;
       cpu.scheduleTimeEventMillis(shrEvent, SYMBOL_PERIOD * 2);
@@ -1071,9 +1081,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
       if (txfifoPos > 0x7f) {
         logw("**** Warning - packet size too large - repeating packet bytes txfifoPos: " + txfifoPos);
       }
-      if (listener != null) {
+      if (rfListener != null) {
         if (DEBUG) log("transmitting byte: " + Utils.hex8(memory[RAM_TXFIFO + (txfifoPos & 0x7f)] & 0xFF));
-        listener.receivedByte((byte)(memory[RAM_TXFIFO + (txfifoPos & 0x7f)] & 0xFF));
+        rfListener.receivedByte((byte)(memory[RAM_TXFIFO + (txfifoPos & 0x7f)] & 0xFF));
       }
       txfifoPos++;
       // Two symbol periods to send a byte...
@@ -1112,10 +1122,10 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
               ackBuf[4] = txCrc.getCRCHi();
               ackBuf[5] = txCrc.getCRCLow();
           }
-          if (listener != null) {
+          if (rfListener != null) {
               if (DEBUG) log("transmitting byte: " + Utils.hex8(memory[RAM_TXFIFO + (txfifoPos & 0x7f)] & 0xFF));
 
-              listener.receivedByte((byte)(ackBuf[ackPos] & 0xFF));
+              rfListener.receivedByte((byte)(ackBuf[ackPos] & 0xFF));
           }
           ackPos++;
           // Two symbol periods to send a byte...
@@ -1198,9 +1208,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
   private void setSFD(boolean sfd) {
     currentSFD = sfd;
     if( (registers[REG_IOCFG0] & SFD_POLARITY) == SFD_POLARITY)
-      sfdPort.setPinState(sfdPin, sfd ? 0 : 1);
+      sfdPort.setPinState(sfdPin, sfd ? IOPort.PinState.LOW : IOPort.PinState.HI);
     else 
-      sfdPort.setPinState(sfdPin, sfd ? 1 : 0);
+      sfdPort.setPinState(sfdPin, sfd ? IOPort.PinState.HI : IOPort.PinState.LOW);
     if (DEBUG) log("SFD: " + sfd + "  " + cpu.cycles);
   }
 
@@ -1208,18 +1218,18 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     currentCCA = cca;
     if (DEBUG) log("Setting CCA to: " + cca);
     if( (registers[REG_IOCFG0] & CCA_POLARITY) == CCA_POLARITY)
-      ccaPort.setPinState(ccaPin, cca ? 0 : 1);
+      ccaPort.setPinState(ccaPin, cca ? IOPort.PinState.LOW : IOPort.PinState.HI);
     else
-      ccaPort.setPinState(ccaPin, cca ? 1 : 0);
+      ccaPort.setPinState(ccaPin, cca ? IOPort.PinState.HI : IOPort.PinState.LOW);
   }
 
   private void setFIFOP(boolean fifop) {
     currentFIFOP = fifop;
     if (DEBUG) log("Setting FIFOP to " + fifop);
     if( (registers[REG_IOCFG0] & FIFOP_POLARITY) == FIFOP_POLARITY) {
-      fifopPort.setPinState(fifopPin, fifop ? 0 : 1);
+      fifopPort.setPinState(fifopPin, fifop ? IOPort.PinState.LOW : IOPort.PinState.HI);
     } else {
-      fifopPort.setPinState(fifopPin, fifop ? 1 : 0);
+      fifopPort.setPinState(fifopPin, fifop ? IOPort.PinState.HI : IOPort.PinState.LOW);
     }
   }
 
@@ -1227,9 +1237,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     currentFIFO = fifo;
     if (DEBUG) log("Setting FIFO to " + fifo);
     if((registers[REG_IOCFG0] & FIFO_POLARITY) == FIFO_POLARITY) {
-      fifoPort.setPinState(fifoPin, fifo ? 0 : 1);
+      fifoPort.setPinState(fifoPin, fifo ? IOPort.PinState.LOW : IOPort.PinState.HI);
     } else {
-      fifoPort.setPinState(fifoPin, fifo ? 1 : 0);
+      fifoPort.setPinState(fifoPin, fifo ? IOPort.PinState.HI : IOPort.PinState.LOW);
     }
   }
 
@@ -1248,6 +1258,11 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
    *  External APIs for simulators simulating Radio medium, etc.
    * 
    *****************************************************************************/
+  @Override
+  public boolean isReadyToReceive() {
+      return getState() == RadioState.RX_SFD_SEARCH;
+  }
+
   public void updateActiveFrequency() {
     /* INVERTED: f = 5 * (c - 11) + 357 + 0x4000 */
     activeFrequency = registers[REG_FSCTRL] - 357 + 2405 - 0x4000;
@@ -1255,10 +1270,12 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
   }
 
   public int getActiveFrequency() {
+    updateActiveFrequency();
     return activeFrequency;
   }
 
   public int getActiveChannel() {
+    updateActiveFrequency();
     return activeChannel;
   }
 
@@ -1266,11 +1283,37 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     return (registers[REG_TXCTRL] & 0x1f);
   }
 
+  public int getOutputPowerIndicatorMax() {
+      return 31;
+  }
+
+  /**
+   * This is actually the "CORR" value.
+   * @param lqi The Corr-val
+   * @sa CC2420 Datasheet
+   */
+  public void setLQI(int lqi){
+      if(lqi < 0) lqi = 0;
+      else if(lqi > 0x7f ) lqi = 0x7f;
+      corrval = lqi;
+  }
+
+  public int getLQI() {
+      return corrval;
+  }
+
   public void setRSSI(int power) {
-    if (DEBUG) log("external setRSSI to: " + power);
-    if (power < -128) {
-      power = -128;
+    final int minp = -128 + RSSI_OFFSET;
+    final int maxp = 128 + RSSI_OFFSET;
+    if (power < minp) {
+        power = -minp;
     }
+    if(power > maxp){
+        power = maxp;
+    }
+
+    if (DEBUG) log("external setRSSI to: " + power);
+
     rssi = power;
     registers[REG_RSSI] = power - RSSI_OFFSET;
     updateCCA();
@@ -1305,17 +1348,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     return -100;
   }
 
-
-  public void setRFListener(RFListener rf) {
-    listener = rf;
-  }
-
-  public interface ChannelListener {
-    public void changedChannel(int channel);
-  }
-  private ChannelListener cl = null;
-  public void setChannelListener(ChannelListener cl) {
-    this.cl = cl;
+  @Override
+  public int getOutputPowerMax() {
+      return 0;
   }
 
   public void notifyReset() {
@@ -1421,8 +1456,9 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     return " VREG_ON: " + on + "  Chip Select: " + chipSelect +
     "  OSC Stable: " + ((status & STATUS_XOSC16M_STABLE) > 0) + 
     "\n RSSI Valid: " + ((status & STATUS_RSSI_VALID) > 0) + "  CCA: " + cca +
-    "\n FIFOP Polarity: " + ((registers[REG_IOCFG0] & FIFOP_POLARITY) == FIFOP_POLARITY) +
-    "  FIFOP: " + currentFIFOP + "  FIFO: " + currentFIFO + "  SFD: " + currentSFD + 
+    "\n FIFOP: " + currentFIFOP + " threshold: " + fifopThr +
+    " polarity: " + ((registers[REG_IOCFG0] & FIFOP_POLARITY) == FIFOP_POLARITY) +
+    "  FIFO: " + currentFIFO + "  SFD: " + currentSFD + 
     "\n " + rxFIFO.stateToString() + " expPacketLen: " + rxlen +
     "\n Radio State: " + stateMachine + "  SPI State: " + state + 
     "\n AutoACK: " + autoAck + "  AddrDecode: " + addressDecode + "  AutoCRC: " + autoCRC +
@@ -1430,8 +1466,8 @@ public class CC2420 extends Chip implements USARTListener, RFListener, RFSource 
     "  ShortAddr: 0x" + Utils.hex8(memory[RAM_SHORTADDR + 1]) + Utils.hex8(memory[RAM_SHORTADDR]) +
     "  LongAddr: 0x" + getLongAddress() +
     "\n Channel: " + activeChannel +
-    "\n FIFOP Threshold: " + fifopThr +
-    "\n";
+    "  Output Power: " + getOutputPower() + "dB (" + getOutputPowerIndicator() + '/' + getOutputPowerIndicatorMax() +
+    ")\n";
   }
 
   public void stateChanged(int state) {

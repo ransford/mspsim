@@ -57,7 +57,7 @@ public class Test implements USARTListener {
     this.cpu = cpu;
     IOUnit usart = cpu.getIOUnit("USART 1");
     if (usart instanceof USART) {
-      ((USART) usart).setUSARTListener(this);
+      ((USART) usart).addUSARTListener(this);
     }
   }
 
@@ -98,7 +98,7 @@ public class Test implements USARTListener {
     }
 
     try {
-      int[] memory = cpu.getMemory();
+      int[] memory = cpu.memory;
       ELF elf = ELF.readELF(args[index++]);
       elf.loadPrograms(memory);
       MapTable map = elf.getMap();

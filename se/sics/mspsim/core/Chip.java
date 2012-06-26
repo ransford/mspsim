@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007, Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * Chip
  *
  * Author  : Joakim Eriksson
  * Created : 17 jan 2008
- * Updated : $Date$
- *           $Revision$
  */
 package se.sics.mspsim.core;
 import java.io.PrintStream;
@@ -58,7 +54,7 @@ public abstract class Chip implements Loggable, EventSource {
   protected final MSP430Core cpu;
 
   private OperatingModeListener[] omListeners;
-  private StateChangeListener[] scListeners;
+  private StateChangeListener stateListener;
   private ConfigurationChangeListener[] ccListeners;
 
   private EventListener eventListener;
@@ -89,31 +85,30 @@ public abstract class Chip implements Loggable, EventSource {
   public void notifyReset() {
   }
 
-  public void addOperatingModeListener(OperatingModeListener listener) {
-    omListeners = (OperatingModeListener[]) ArrayUtils.add(OperatingModeListener.class, omListeners, listener);
+  public synchronized void addOperatingModeListener(OperatingModeListener listener) {
+    omListeners = ArrayUtils.add(OperatingModeListener.class, omListeners, listener);
   }
   
-  public void removeOperatingModeListener(OperatingModeListener listener) {
-    omListeners = (OperatingModeListener[]) ArrayUtils.remove(omListeners, listener);
+  public synchronized void removeOperatingModeListener(OperatingModeListener listener) {
+    omListeners = ArrayUtils.remove(omListeners, listener);
   }
 
-  public void addStateChangeListener(StateChangeListener listener) {
-      scListeners = (StateChangeListener[]) ArrayUtils.add(StateChangeListener.class, scListeners, listener);
-    }
-    
-  public void removeStateChangeListener(StateChangeListener listener) {
-      scListeners = (StateChangeListener[]) ArrayUtils.remove(scListeners, listener);
+  public synchronized void addStateChangeListener(StateChangeListener listener) {
+      stateListener = StateChangeListener.Proxy.INSTANCE.add(stateListener, listener);
   }
 
-  public void addConfigurationChangeListener(ConfigurationChangeListener listener) {
-      ccListeners = (ConfigurationChangeListener[]) ArrayUtils.add(ConfigurationChangeListener.class, ccListeners, listener);
-    }
-    
-  public void removeConfigurationChangeListener(ConfigurationChangeListener listener) {
-      ccListeners = (ConfigurationChangeListener[]) ArrayUtils.remove(ccListeners, listener);
+  public synchronized void removeStateChangeListener(StateChangeListener listener) {
+      stateListener = StateChangeListener.Proxy.INSTANCE.remove(stateListener, listener);
   }
 
-  
+  public synchronized void addConfigurationChangeListener(ConfigurationChangeListener listener) {
+      ccListeners = ArrayUtils.add(ConfigurationChangeListener.class, ccListeners, listener);
+  }
+
+  public synchronized void removeConfigurationChangeListener(ConfigurationChangeListener listener) {
+      ccListeners = ArrayUtils.remove(ccListeners, listener);
+  }
+
   public int getMode() {
     return mode;
   }
@@ -137,15 +132,20 @@ public abstract class Chip implements Loggable, EventSource {
     modeNames = names;
   }
 
-  
-  public void setEventListener(EventListener e) {
-    eventListener = e;
-    sendEvents = eventListener != null;
+  public synchronized void addEventListener(EventListener listener) {
+      eventListener = EventListener.Proxy.INSTANCE.add(eventListener, listener);
+      sendEvents = eventListener != null;
   }
-  
+
+  public synchronized void removeEventListener(EventListener listener) {
+      eventListener = EventListener.Proxy.INSTANCE.add(eventListener, listener);
+      sendEvents = eventListener != null;
+  }
+
   protected void sendEvent(String event, Object data) {
-    if (eventListener != null) {
-      eventListener.event(this, event, data);
+    EventListener listener = this.eventListener;
+    if (listener != null) {
+        listener.event(this, event, data);
     }
   }
   
@@ -187,11 +187,9 @@ public abstract class Chip implements Loggable, EventSource {
           int oldState = chipState;
           chipState = newState;
           /* inform listeners */
-          StateChangeListener[] listeners = scListeners;
-          if (listeners != null) {
-              for (int i = 0, n = listeners.length; i < n; i++) {
-                  listeners[i].stateChanged(this, oldState, chipState);
-              }
+          StateChangeListener listener = stateListener;
+          if (listener != null) {
+              listener.stateChanged(this, oldState, chipState);
           }
       }
   }

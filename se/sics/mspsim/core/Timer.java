@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007-2010, Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * Timer
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
@@ -71,7 +67,6 @@ import se.sics.mspsim.util.Utils;
  */
 public class Timer extends IOUnit {
 
-    public static final boolean DEBUG = false;
   public static final int TBIV = 0x011e;
   public static final int TAIV = 0x012e;
 
@@ -198,10 +193,10 @@ public class Timer extends IOUnit {
 
   private final int ccr1Vector;
   private final int ccr0Vector;
-  private final MSP430Core core;
-  
+
   // Support variables Max 7 compare regs for now (timer b)
   private final int noCompare;
+  private final CCR ccr[];
 
   /* this is class represents a capture and compare register */
   private class CCR extends TimeEvent {
@@ -220,8 +215,8 @@ public class Timer extends IOUnit {
       boolean sync;
       int outMode;
 
-      int interruptVector;
-      int index;
+      final int interruptVector;
+      final int index;
 
       public CCR(long time, String name, int vector, int index) {
           super(time, name);
@@ -238,7 +233,7 @@ public class Timer extends IOUnit {
               //System.out.println("**** IGNORING EXECUTION OF CCR - timer stopped!!!");
               return;
           }
-          long cycles = core.cycles;
+          long cycles = cpu.cycles;
           updateCounter(cycles);
 
           if (expCaptureTime != -1 && cycles >= expCaptureTime) {
@@ -290,11 +285,11 @@ public class Timer extends IOUnit {
           if ((tcctl & CC_TRIGGER_INT) == CC_TRIGGER_INT) {
               if (index == 0) {
                   log("triggering interrupt");
-                  core.flagInterrupt(interruptVector, Timer.this, true);                  
+                  cpu.flagInterrupt(interruptVector, Timer.this, true);
               } else if (lastTIV == 0) {
                   lastTIV = index * 2;
                   log("triggering interrupt TIV: " + lastTIV);
-                  core.flagInterrupt(interruptVector, Timer.this, true);
+                  cpu.flagInterrupt(interruptVector, Timer.this, true);
               } else if (lastTIV > index * 2) {
                   /* interrupt already triggered, but set to this lower IRQ */
                   lastTIV = index * 2;
@@ -311,21 +306,21 @@ public class Timer extends IOUnit {
           boolean clkSource = false;
 
           if (clockSource == SRC_SMCLK) {
-              frqClk = core.smclkFrq / inputDivider;
+              frqClk = cpu.smclkFrq / inputDivider;
           } else if (clockSource == SRC_ACLK) {
-              frqClk = core.aclkFrq / inputDivider;
+              frqClk = cpu.aclkFrq / inputDivider;
           }
 
           // Handle the captures...
           if (captureOn) {
               if (inputSrc == SRC_ACLK) {
-                  divisor = core.aclkFrq;
+                  divisor = cpu.aclkFrq;
                   clkSource = true;
               }
 
               if (DEBUG) {
                   log("expCapInterval[" + index + "] frq = " +
-                          frqClk + " div = " + divisor + " SMCLK_FRQ: " + core.smclkFrq);
+                          frqClk + " div = " + divisor + " SMCLK_FRQ: " + cpu.smclkFrq);
               }
 
               // This is used to calculate expected time before next capture of
@@ -355,9 +350,9 @@ public class Timer extends IOUnit {
       public void update() {
           /* schedule this capture register for update*/
           if (expCaptureTime != -1 && expCaptureTime != time) {
-              if (DEBUG) log(core.cycles + ":" + ">> SCHEDULING " + getName() + " = " + tccr +
+              if (DEBUG) log(cpu.cycles + ":" + ">> SCHEDULING " + getName() + " = " + tccr +
                       " TR: " + counter + " at: " + expCaptureTime);
-              core.scheduleCycleEvent(this, expCaptureTime);
+              cpu.scheduleCycleEvent(this, expCaptureTime);
           }
       }
       
@@ -387,8 +382,6 @@ public class Timer extends IOUnit {
       }
 
   }
-  
-  private CCR ccr[];
 
   private TimeEvent counterTrigger = new TimeEvent(0, "Timer Counter Trigger") {
       public void execute(long t) {
@@ -397,12 +390,12 @@ public class Timer extends IOUnit {
           // This should be updated whenever clockspeed changes...
           nextTimerTrigger = (long) (nextTimerTrigger + 0x10000 * cyclesMultiplicator);
 //          System.out.println("*** scheduling counter trigger..." + nextTimerTrigger + " now = " + t);
-          core.scheduleCycleEvent(this, nextTimerTrigger);
+          cpu.scheduleCycleEvent(this, nextTimerTrigger);
           
           
           if (lastTIV == 0 && interruptEnable) {
               lastTIV = memory[tiv] = timerOverflow;
-              core.flagInterrupt(ccr1Vector, Timer.this, true);
+              cpu.flagInterrupt(ccr1Vector, Timer.this, true);
           } else {
 //              System.out.println("*** Did not trigger interrupt: " + interruptEnable);
           }
@@ -420,10 +413,9 @@ public class Timer extends IOUnit {
    *
    */
 
-  public Timer(MSP430Core core, int[] memory, MSP430Config.TimerConfig config) {
-    super(config.name, config.name, memory, config.offset);
+  public Timer(MSP430Core cpu, int[] memory, MSP430Config.TimerConfig config) {
+    super(config.name, config.name, cpu, memory, config.offset);
     this.srcMap = config.srcMap;
-    this.core = core;
     // noCompare = (srcMap.length / 4) - 1;
     noCompare = config.ccrCount;
     if (srcMap == TIMER_Ax149) {
@@ -443,9 +435,6 @@ public class Timer extends IOUnit {
     }
     
     reset(0);
-    
-    if (DEBUG) setLogStream(System.out);
-    
   }
 
   public void reset(int type) {
@@ -483,7 +472,7 @@ public class Timer extends IOUnit {
   // Should handle read of byte also (currently ignores that...)
   public int read(int address, boolean word, long cycles) {
 
-      if (DEBUG) System.out.println(getName() + " read from: " + Utils.hex16(address));
+//      if (DEBUG) log("read from: $" + Utils.hex(address, 4));
 
       if (address == tiv) {
       // should clear registers for cause of interrupt (highest value)?
@@ -542,11 +531,11 @@ public class Timer extends IOUnit {
       val = ccr[i].tccr;
       break;
     default:
-      logw("Not supported read, returning zero!!! addr: " + index + " addr: " + Utils.hex16(address));
+      logw("Not supported read, returning zero!!! addr: " + index + " addr: $" + Utils.hex(address, 4));
     }
     
     if (DEBUG) {
-      log("Read " + getName(address) + "(" + Utils.hex16(address) + ") => " +
+      log("Read " + getName(address) + "($" + Utils.hex(address, 4) + ") => $" +
           Utils.hex16(val) + " (" + val + ")");
     }
 
@@ -566,7 +555,7 @@ public class Timer extends IOUnit {
     /* if ACLK we can calculate edge... */
     if (ccr[cctl].inputSrc == SRC_ACLK) {
       /* needs the TimerA clock speed here... */
-      int aTicks = clockSpeed / core.aclkFrq;
+      int aTicks = clockSpeed / cpu.aclkFrq;
       updateCounter(cycles);
       
       /* only calculate this if clock runs faster then ACLK - otherwise it
@@ -587,14 +576,14 @@ public class Timer extends IOUnit {
       }
     } else if (lastTIV / 2 < noCompare) {
       if (DEBUG) {
-	log(core.cycles + ": Clearing IFG for CCR" + (lastTIV/2));
+	log(cpu.cycles + ": Clearing IFG for CCR" + (lastTIV/2));
       }
       // Clear interrupt flags!
       ccr[lastTIV / 2].tcctl &= ~CC_IFG;
     }
 
     /* flag this interrupt off */
-    core.flagInterrupt(ccr1Vector, this, false);
+    cpu.flagInterrupt(ccr1Vector, this, false);
     lastTIV = 0;
 
     /* reevaluate interrupts for the ccr1 vector - possibly flag on again... */
@@ -603,7 +592,8 @@ public class Timer extends IOUnit {
     }
     /* if the timer overflow interrupt is triggering - lowest priority => signal! */
     if (lastTIV == 0 && interruptEnable & interruptPending) {
-        core.flagInterrupt(ccr1Vector, this, true);
+        lastTIV = timerOverflow;
+        cpu.flagInterrupt(ccr1Vector, this, true);
     }
   }
 
@@ -624,7 +614,7 @@ public class Timer extends IOUnit {
 
     int iAddress = address - offset;
 
-    if (DEBUG) System.out.println(getName() + " write to: " + Utils.hex16(address) +
+    if (DEBUG) log("write to: $" + Utils.hex(address, 4) +
             " => " + iAddress + " = " + data);
 
 
@@ -666,7 +656,7 @@ public class Timer extends IOUnit {
             ccr[i].timerStarted(cycles);
         }
         
-        if (DEBUG) log(core.cycles + ": Timer started: " + counter + "  CCR1:" + ccr[1].expCaptureTime);
+        if (DEBUG) log(cpu.cycles + ": Timer started: " + counter + "  CCR1:" + ccr[1].expCaptureTime);
         
       }
       if (mode != STOP && newMode == STOP) {
@@ -675,7 +665,7 @@ public class Timer extends IOUnit {
           for (int i = 0; i < noCompare; i++) {
               ccr[i].timerStopped(cycles);
           }
-          if (DEBUG) log(core.cycles + ": Timer stopped: " + counter + "  CCR1:" + ccr[1].expCaptureTime);
+          if (DEBUG) log(cpu.cycles + ": Timer stopped: " + counter + "  CCR1:" + ccr[1].expCaptureTime);
       }
       
       mode = newMode;
@@ -729,7 +719,7 @@ public class Timer extends IOUnit {
       if (!oldCapture && reg.captureOn && (src & SRC_PORT) != 0) {
         int port = (src & 0xff) >> 4;
         int pin = src & 0x0f;
-        IOPort ioPort = (IOPort) core.getIOUnit("P" + port);
+        IOPort ioPort = cpu.getIOUnit(IOPort.class, "P" + port);
         if (DEBUG) log("Assigning Port: " + port + " pin: " + pin +
             " for capture");
         ioPort.setTimerCapture(this, pin);
@@ -804,20 +794,20 @@ public class Timer extends IOUnit {
   void updateCyclesMultiplicator() {
     cyclesMultiplicator = inputDivider;
     if (clockSource == SRC_ACLK) {
-      cyclesMultiplicator = (cyclesMultiplicator * core.smclkFrq) /
-      core.aclkFrq;
+      cyclesMultiplicator = (cyclesMultiplicator * cpu.smclkFrq) /
+      cpu.aclkFrq;
       if (DEBUG) {
         log("setting multiplicator to: " + cyclesMultiplicator);
       }
     }
-    clockSpeed = (int) (core.smclkFrq / cyclesMultiplicator);
+    clockSpeed = (int) (cpu.smclkFrq / cyclesMultiplicator);
   }
   
   void resetCounter(long cycles) {
       double divider = 1.0;
       if (clockSource == SRC_ACLK) {
           // Should later be divided with DCO clock?
-          divider = 1.0 * core.smclkFrq / core.aclkFrq;
+          divider = 1.0 * cpu.smclkFrq / cpu.aclkFrq;
       }
       divider = divider * inputDivider;
         
@@ -838,7 +828,7 @@ public class Timer extends IOUnit {
       log("Counter reset at " + cycles +  " cycMul: " + cyclesMultiplicator);
     }
 
-    core.scheduleCycleEvent(counterTrigger, cycles + (long)((0x10000 - counter) * cyclesMultiplicator));
+    cpu.scheduleCycleEvent(counterTrigger, cycles + (long)((0x10000 - counter) * cyclesMultiplicator));
 //    System.out.println("(re)Scheduling counter trigger..." + counterTrigger.time + " now = " + cycles + " ctr: " + counter);
 
   }
@@ -857,7 +847,7 @@ public class Timer extends IOUnit {
     double divider = 1;
     if (clockSource == SRC_ACLK) {
       // Should later be divided with DCO clock?
-      divider = 1.0 * core.smclkFrq / core.aclkFrq;
+      divider = 1.0 * cpu.smclkFrq / cpu.aclkFrq;
     }
     divider = divider * inputDivider;
     
@@ -927,24 +917,24 @@ public class Timer extends IOUnit {
    * @param ccrIndex - the capture register
    * @param source - the capture source (0/1)
    */
-  public void capture(int ccrIndex, int source, int value) {
+  public void capture(int ccrIndex, int source, IOPort.PinState value) {
       CCR reg = ccr[ccrIndex];
       if (ccrIndex < noCompare && reg.captureOn && reg.inputSel == source) {
           /* This is obviously a capture! */
           boolean rise = (reg.capMode & CM_RISING) != 0;
           boolean fall = (reg.capMode & CM_FALLING) != 0;
-          if ((value == IOPort.PIN_HI && rise) ||
-                  (value == IOPort.PIN_LOW && fall)) {
+          if ((value == IOPort.PinState.HI && rise) ||
+                  (value == IOPort.PinState.LOW && fall)) {
               //      System.out.println("*** Capture on CCR_" + ccrIndex + " " + " value: " +
               //            value);
               // update counter values and compare register
-              updateCounter(core.cycles);
+              updateCounter(cpu.cycles);
               reg.tccr = counter;
               
               // Set the interrupt flag...
               reg.tcctl |= CC_IFG;
-              reg.triggerInterrupt(core.cycles);
-              /* triggerInterrupts(core.cycles); */
+              reg.triggerInterrupt(cpu.cycles);
+              /* triggerInterrupts(cpu.cycles); */
           }
     }
   }
@@ -954,39 +944,40 @@ public class Timer extends IOUnit {
   public void interruptServiced(int vector) {
     if (vector == ccr0Vector) {
       // Reset the interrupt trigger in "core".
-      core.flagInterrupt(ccr0Vector, this, false);
+      cpu.flagInterrupt(ccr0Vector, this, false);
       // Remove the flag also - but only for the dedicated vector (CCR0)
       ccr[0].tcctl &= ~CC_IFG;
     }
     if (MSP430Core.debugInterrupts) {
       System.out.println(getName() + " >>>> interrupt Serviced " + lastTIV + 
-          " at cycles: " + core.cycles + " servicing delay: " + (core.cycles - triggerTime));
+          " at cycles: " + cpu.cycles + " servicing delay: " + (cpu.cycles - triggerTime));
     }
     /* old method is replaced */
-    /* triggerInterrupts(core.cycles); */
+    /* triggerInterrupts(cpu.cycles); */
   }
 
   public int getModeMax() {
     return 0;
   }
-  
-  public String getName(int address) {
+
+  private String getName(int address) {
     int reg = address - offset;
     if (reg == 0) return "TCTL";
     if (reg < 0x10) return "TCTL" + (reg - 2) / 2;
     if (reg == 0x10) return "TR";
     if (reg < 0x20) return "TCCR" + (reg - 0x12) / 2;
-    return " UNDEF(" + Utils.hex16(address) + ")";
+    return " UNDEF(" + Utils.hex(address, 4) + ")";
   }
-  
+
+  @Override
   public String info() {
       StringBuilder sb = new StringBuilder();
       sb.append("  Source: " + getSourceName(clockSource) + "  Speed: " + clockSpeed
-              + " Hz  inDiv: " + inputDivider + "  Multiplyer: " + cyclesMultiplicator + '\n'
+              + " Hz  inDiv: " + inputDivider + "  Multiplier: " + cyclesMultiplicator + '\n'
               + "  Mode: " + modeNames[mode] + "  IEn: " + interruptEnable
-              + "  IFG: " + interruptPending + "  TR: " + updateCounter(core.cycles) + '\n');
+              + "  IFG: " + interruptPending + "  TR: " + updateCounter(cpu.cycles) + '\n');
       for (CCR reg : ccr) {
-          if (reg != null) sb.append("  ").append(reg.info()).append('\n');
+          sb.append("  ").append(reg.info()).append('\n');
       }
       return sb.toString();
   }

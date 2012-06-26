@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007, Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,49 +36,14 @@
  */
 
 package  se.sics.mspsim.core;
+import java.util.Arrays;
 import se.sics.mspsim.util.Utils;
 
 public class IOPort extends IOUnit {
 
-    public static final int PIN_LOW = 0;
-    public static final int PIN_HI = 1;
+    public enum PinState { LOW, HI };
 
-    private final int port;
-    private final int interrupt;
-    private final MSP430Core cpu;
-
-    // External pin state!
-    private int pinState[] = new int[8];
-
-    /* NOTE: The offset needs to be configurable since the new IOPorts on 
-     * the 5xxx series are located at other addresses.
-     * Maybe create another IOPort that just convert IOAddress to this 'old' mode?
-     * - will be slightly slower on IOWrite/read but very easy to implement.
-     * 
-     * 
-     * 
-     * 
-     * 
-     * 
-     */
-    
-    enum PortReg {IN, OUT, DIR, SEL, IFG, IES, IE, REN, DS, IV_L, IV_H};
-    
-    public static final int IN = 0;
-    public static final int OUT = 1;
-    public static final int DIR = 2;
-    public static final int SEL = 4; /* what about SEL2? */
-    public static final int IFG = 5;
-    public static final int IES = 6;
-    public static final int IE = 7;
-    public static final int REN = 8;
-    public static final int DS = 9;
-    public static final int IV_L = 10;
-    public static final int IV_H = 11;
-
-    private static final String[] names = {
-        "IN", "OUT", "DIR", "SEL", "IFG", "IES", "IE", "REN", "DS" };
-
+    public enum PortReg {IN, OUT, DIR, SEL, SEL2, IFG, IES, IE, REN, DS, IV_L, IV_H};
 
     /* portmaps for 1611 */
     private static final PortReg[] PORTMAP_INTERRUPT = 
@@ -86,10 +51,15 @@ public class IOPort extends IOUnit {
     private static final PortReg[] PORTMAP_NO_INTERRUPT = 
         {PortReg.IN, PortReg.OUT, PortReg.DIR, PortReg.SEL};
 
-    private PortReg[] portMap;
+    private final int port;
+    private final int interrupt;
+
+    // External pin state!
+    private final PinState pinState[] = new PinState[8];
+
+    private final PortReg[] portMap;
 
     private PortListener portListener = null;
-    // represents the direction register
 
     /* Registers for Digital I/O */
 
@@ -97,11 +67,12 @@ public class IOPort extends IOUnit {
     private int out;
     private int dir;
     private int sel;
+    private int sel2;
     private int ie;
     private int ifg;
     private int ies; /* edge select */
     private int ren;
-//    private int ds;
+    private int ds;
 
     private int iv; /* low / high */
 
@@ -113,39 +84,32 @@ public class IOPort extends IOUnit {
      * Creates a new <code>IOPort</code> instance.
      *
      */
-    public IOPort(MSP430Core cpu, int port,
-            int interrupt, int[] memory, int offset) {
-        super("P" + port, "Port " + port, memory, offset);
-        this.port = port;
-        this.interrupt = interrupt;
-        this.ie = 0;
-        this.ifg = 0;
-        this.cpu = cpu;
-
-        if (interrupt == 0) {
-            portMap = PORTMAP_NO_INTERRUPT;
-        } else {
-            portMap = PORTMAP_INTERRUPT;
-        }
+    public IOPort(MSP430Core cpu, int port, int interrupt, int[] memory, int offset) {
+        this(cpu, port, interrupt, memory, offset,
+                interrupt == 0 ? PORTMAP_NO_INTERRUPT : PORTMAP_INTERRUPT);
     }
 
     /* Create an IOPort with a special PortMap */
     public IOPort(MSP430Core cpu, int port,
             int interrupt, int[] memory, int offset, PortReg[] portMap) {
-        this(cpu, port, interrupt, memory, offset);
+        super("P" + port, "Port " + port, cpu, memory, offset);
+        this.port = port;
+        this.interrupt = interrupt;
+        this.ie = 0;
+        this.ifg = 0;
         this.portMap = portMap;
-        
-        System.out.println("Port " + port + " interrupt vector: " + interrupt);
+
+//        System.out.println("Port " + port + " interrupt vector: " + interrupt);
         /* register all the registers from the port-map */
         for (int i = 0; i < portMap.length; i++) {
             if (portMap[i] != null) {
-                System.out.println("  P" + port + portMap[i] + " at " + Utils.hex16(offset + i));
-                cpu.setIO(offset + i, this, false);
+//                System.out.println("  P" + port + portMap[i] + " at " + Utils.hex16(offset + i));
+                cpu.setIORange(offset + i, 1, this);
             }
         }
     }
     
-    public static IOPort parseIOPort(MSP430Core cpu, int interrupt, String specification) {
+    public static IOPort parseIOPort(MSP430Core cpu, int interrupt, String specification, IOPort last) {
         /* Specification = Px=Offset,REG Off, ... */
         String[] specs = specification.split(",");
         int port = specs[0].charAt(1) - '0';
@@ -157,10 +121,17 @@ public class IOPort extends IOUnit {
             String[] preg = specs[i].split(" ");
             PortReg pr = PortReg.valueOf(preg[0]);
             int offs = Integer.parseInt(preg[1], 16);
+            if (offs >= portMap.length) {
+                portMap = Arrays.copyOf(portMap, offs + 1);
+            }
             portMap[offs] = pr;
         }
-        
-        return new IOPort(cpu, port, interrupt, cpu.memory, offset, portMap);
+        IOPort newPort = new IOPort(cpu, port, interrupt, cpu.memory, offset, portMap);
+        if (last != null && offset == last.offset && offset > 0) {
+            // This port is a pair with previous port to allow 16 bits writes
+            last.ioPair = newPort;
+        }
+        return newPort;
     }
 
     public int getPort() {
@@ -191,15 +162,6 @@ public class IOPort extends IOUnit {
         portListener = PortListenerProxy.removePortListener(portListener, oldListener);
     }
 
-    @Deprecated
-    public synchronized void setPortListener(PortListener listener) {
-        if (listener != null) {
-            addPortListener(listener);
-        } else {
-            portListener = null;
-        }
-    }
-
     public void setTimerCapture(Timer timer, int pin) {
         if (DEBUG) {
             log("Setting timer capture for pin: " + pin);
@@ -220,7 +182,37 @@ public class IOPort extends IOUnit {
         }
         //System.out.println("*** Setting IV to: " + iv + " ifg: " + ifg);
     }
-    
+
+    public int getRegister(PortReg register) {
+        switch(register) {
+        case DIR:
+            return dir;
+        case IE:
+            return ie;
+        case IES:
+            return ies;
+        case IFG:
+            return ifg;
+        case IN:
+            return in;
+        case IV_H:
+            return (iv >> 8) & 0xff;
+        case IV_L:
+            return iv & 0xff;
+        case OUT:
+            return out;
+        case REN:
+            return ren;
+        case DS:
+            return ds;
+        case SEL:
+            return sel;
+        case SEL2:
+            return sel2;
+        }
+        return 0;
+    }
+
     /* only byte access!!! */
     int read_port(PortReg function, long cycles) {
         switch(function) {
@@ -240,6 +232,10 @@ public class IOPort extends IOUnit {
             return ies;
         case SEL:
             return sel;
+        case SEL2:
+            return sel2;
+        case DS:
+            return ds;
         case IV_L:
             return iv & 0xff;
         case IV_H:
@@ -300,7 +296,13 @@ public class IOPort extends IOUnit {
         case SEL:
             sel = data;
             break;
+        case SEL2:
+            sel2 = data;
+            break;
             /* Can IV be written ? */
+        case DS:
+            ds = data;
+            break;
         case IV_L:
             iv = (iv & 0xff00) | data;
             break;
@@ -312,11 +314,7 @@ public class IOPort extends IOUnit {
 
 
     public int read(int address, boolean word, long cycles) {
-        if (DEBUG) {
-            log("Notify read: " + address);
-        }
         PortReg reg = portMap[address - offset];
-        
         /* only byte read allowed if not having an ioPair */
         if (word && reg == PortReg.IV_L) {
             /* Always read low first then high => update on high!!! */
@@ -332,21 +330,18 @@ public class IOPort extends IOUnit {
 
     public void write(int address, int data, boolean word, long cycles) {
         int iAddress = address - offset;
-
+        if (iAddress < 0 || iAddress >= portMap.length) {
+            throw new EmulationException("Writing to illegal IO port address at " + getID() + ": $" + Utils.hex(address, 4));
+        }
+        PortReg fun = portMap[iAddress];
         if (DEBUG) {
-            try {
-                log("Writing to " + getID() +
-                        portMap[iAddress] +
-                        "  $" + Utils.hex8(address) +
-                        " => $" + Utils.hex8(data) + "=#" +
-                        Utils.binary8(data) + " word: " + word);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            log("Writing to " + getID() + fun +
+                    " ($" + Utils.hex(address, 2) +
+                    ") => $" + Utils.hex(data, 2) + "=#" +
+                    Utils.binary8(data) + (word ? " (word)" : ""));
         }
 
         /* only byte write - need to convert any word write here... */
-        PortReg fun = portMap[iAddress];
         if (word && ioPair != null) {
             write_port(fun, data & 0xff, cycles);
             ioPair.write_port(fun, data >> 8, cycles);
@@ -359,11 +354,11 @@ public class IOPort extends IOUnit {
     }
 
     // for HW to set hi/low on the pins...
-    public void setPinState(int pin, int state) {
+    public void setPinState(int pin, PinState state) {
         if (pinState[pin] != state) {
             pinState[pin] = state;
             int bit = 1 << pin;
-            if (state == PIN_HI) {
+            if (state == PinState.HI) {
                 in |= bit;
             } else {
                 in &= ~bit;
@@ -371,7 +366,7 @@ public class IOPort extends IOUnit {
             if (interrupt > 0) {
                 if ((ies & bit) == 0) {
                     // LO/HI transition
-                    if (state == PIN_HI) {
+                    if (state == PinState.HI) {
                         ifg |= bit;
                         updateIV();
                         if (DEBUG) {
@@ -380,7 +375,7 @@ public class IOPort extends IOUnit {
                     }
                 } else {
                     // HI/LO transition
-                    if (state == PIN_LOW) {
+                    if (state == PinState.LOW) {
                         ifg |= bit;
                         updateIV();
                         if (DEBUG) {
@@ -404,23 +399,33 @@ public class IOPort extends IOUnit {
     }
 
     public void reset(int type) {
-        for (int i = 0, n = 8; i < n; i++) {
-            pinState[i] = PIN_LOW;
-        }
+        int oldValue = out | (~dir) & 0xff;
+
+        Arrays.fill(pinState, PinState.LOW);
+        in = 0;
+        dir = 0;
+        ren = 0;
         ifg = 0;
         ie = 0;
         iv = 0;
         cpu.flagInterrupt(interrupt, this, (ifg & ie) > 0);
+
+        PortListener listener = portListener;
+        int newValue = out | (~dir) & 0xff;
+        if (oldValue != newValue && listener != null) {
+            listener.portWrite(this, newValue);
+        }
     }
 
     public String info() {
         StringBuilder sb = new StringBuilder();
-        /* TODO: USE PORTMAP FOR THIS!!! */
-        String[] regs = names;
-        sb.append('$').append(Utils.hex16(offset)).append(':');
-        for (int i = 0, n = regs.length; i < n; i++) {
-            sb.append(' ').append(regs[i]).append(":$")
-            .append(Utils.hex8(0));
+        sb.append(" $").append(Utils.hex(offset, 2)).append(':');
+        for (int i = 0, n = portMap.length; i < n; i++) {
+            PortReg reg = portMap[i];
+            if (reg != null) {
+                sb.append(' ').append(reg).append("($").append(Utils.hex(i, 2)).append("):$")
+                .append(Utils.hex(0, 2));
+            }
         }
         return sb.toString();
     }

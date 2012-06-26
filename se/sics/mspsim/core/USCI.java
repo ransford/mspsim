@@ -27,16 +27,12 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * USCI Module for the MSP430xf2xxx series.
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
@@ -87,7 +83,7 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
   public static final int UTCTL_URXSE = 0x08;
   public static final int USCI_BUSY = 0x01;
   
-  private USARTListener listener;
+  private USARTListener usartListener;
 
   private int utxifg;
   private int urxifg;
@@ -100,10 +96,9 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
   private int nextTXByte = -1;
   private int txShiftReg = -1;
   private boolean transmitting = false;
-  
-  private MSP430Core cpu;
-  private SFR sfr;
-  private int sfrAddress;
+
+  private final SFR sfr;
+  private final int sfrAddress;
 
   /* ifg and ie if not in sfr... - assume IE in sfraddr and IFG in addr + 1*/
   private int ifgAddress = 0;
@@ -141,9 +136,7 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
    *
    */
   public USCI(MSP430Core cpu, int uartID, int[] memory, MSP430Config config) {
-    super(config.uartConfig[uartID].name, config.uartConfig[uartID].name, memory, config.uartConfig[uartID].offset);
-    System.out.println("NAME: " + config.uartConfig[uartID].name);
-    this.cpu = cpu;
+    super(config.uartConfig[uartID].name, cpu, memory, config.uartConfig[uartID].offset);
     this.uartID = uartID;
     MSP430Config.UARTConfig uartConfig = config.uartConfig[uartID];
 
@@ -155,6 +148,8 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
         sfr.registerSFDModule(uartConfig.sfrAddr, uartConfig.rxBit, this, uartConfig.rxVector);
         sfr.registerSFDModule(uartConfig.sfrAddr, uartConfig.txBit, this, uartConfig.txVector);
     } else {
+        sfr = null;
+        sfrAddress = 0;
         ieAddress = uartConfig.sfrAddr;
         ifgAddress = uartConfig.sfrAddr + 1;
     }
@@ -193,13 +188,13 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
   }
   
   private void setBitIFG(int bits) {
-    if ((bits) > 0) {
-        System.out.println(getName() + " Set utxifg = " + utxifg +
-                " sfrA: " + sfrAddress + " bits: " + bits);
-    }
+//    if ((bits) > 0) {
+//        System.out.println(getName() + " Set utxifg = " + utxifg +
+//                " sfrA: " + sfrAddress + " bits: " + bits);
+//    }
     if (sfr != null) {
         sfr.setBitIFG(sfrAddress, bits);
-        System.out.println("SFR =>" + sfr.getIFG(sfrAddress));
+//        System.out.println("SFR =>" + sfr.getIFG(sfrAddress));
     } else {
         memory[ifgAddress] |= bits;
     }
@@ -235,8 +230,14 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
   }
 
   /* reuse USART listener API for USCI */
-  public void setUSARTListener(USARTListener listener) {
-    this.listener = listener;
+  @Override
+  public synchronized void addUSARTListener(USARTListener listener) {
+      usartListener = USARTListener.Proxy.INSTANCE.add(usartListener, listener);
+  }
+
+  @Override
+  public synchronized void removeUSARTListener(USARTListener listener) {
+      usartListener = USARTListener.Proxy.INSTANCE.remove(usartListener, listener);
   }
 
   // Only 8 bits / read!
@@ -409,11 +410,12 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
 
   private void handleTransmit(long cycles) {
     if (cpu.getMode() >= MSP430Core.MODE_LPM3) {
-      System.out.println(getName() + " Warning: USART transmission during LPM!!! " + nextTXByte);
+      logw("Warning: USART transmission during LPM!!! " + nextTXByte);
     }
 
     if (transmitting) {
         /* in this case we have shifted out the last character */
+        USARTListener listener = this.usartListener;
         if (listener != null && txShiftReg != -1) {
             listener.dataReceived(this, txShiftReg);
         }
@@ -486,10 +488,10 @@ public class USCI extends IOUnit implements SFRModule, DMATrigger, USARTSource {
   }
   
   public void clearDMATrigger(int index) {
-      System.out.println("UART clearing DMA " + index);
+//      System.out.println("UART clearing DMA " + index);
       if (index == 0) {
           /* clear RX - might be different in different modes... */
-          System.out.println("UART clearing read bit!");
+//          System.out.println("UART clearing read bit!");
           clrBitIFG(urxifg);
           stateChanged(USARTListener.RXFLAG_CLEARED, true);
       } else {

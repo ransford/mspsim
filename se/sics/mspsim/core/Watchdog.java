@@ -68,7 +68,6 @@ public class Watchdog extends IOUnit implements SFRModule {
   private int wdtctl;
   public boolean wdtOn = true;
   private boolean hold = false;
-  private MSP430Core cpu;
 
   // The current "delay" when started/clered (or hold)
   private int delay;
@@ -88,8 +87,7 @@ public class Watchdog extends IOUnit implements SFRModule {
   };
 
   public Watchdog(MSP430Core cpu) {
-    super("Watchdog", cpu.memory, 0x120);
-    this.cpu = cpu;
+    super("Watchdog", cpu, cpu.memory, 0x120);
     cpu.getSFR().registerSFDModule(0, WATCHDOG_INTERRUPT_BIT, this, WATCHDOG_VECTOR);
   }
    
@@ -121,7 +119,7 @@ public class Watchdog extends IOUnit implements SFRModule {
     if (address == WDTCTL) {
       if ((value >> 8) == 0x5a) {
         wdtctl = value & 0xff;
-        if (DEBUG) log("Wrote to WDTCTL: " + Utils.hex8(wdtctl) + " from " + cpu.getPC());
+        if (DEBUG) log("Wrote to WDTCTL: " + Utils.hex8(wdtctl) + " from $" + Utils.hex(cpu.getPC(), 4));
         
         // Is it on?
         wdtOn = (value & 0x80) == 0;
@@ -142,7 +140,7 @@ public class Watchdog extends IOUnit implements SFRModule {
         }
       } else {
         // Trigger reset!!
-        logw("illegal write to WDTCTL (" + value + ") from $" + Utils.hex16(cpu.getPC())
+        logw("illegal write to WDTCTL (" + value + ") from $" + Utils.hex(cpu.getPC(), 4)
             + " - reset!!!!");
         cpu.flagInterrupt(RESET_VECTOR, this, true);
       }

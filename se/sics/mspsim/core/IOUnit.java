@@ -27,56 +27,52 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  *
  * IOUnit
  *
  * Author  : Joakim Eriksson
  * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
 
 package se.sics.mspsim.core;
 
 import java.io.PrintStream;
 
-import se.sics.mspsim.util.ArrayUtils;
-
 public abstract class IOUnit implements InterruptHandler, Loggable {
 
-  int[] memory;
-  int offset;
+  protected final MSP430Core cpu;
+  protected final int[] memory;
+  protected final int offset;
 
   protected final String id;
   protected final String name;
 
-  private StateChangeListener[] scListeners;
+  private StateChangeListener stateListener;
   private int ioState;
-  
+
   protected EmulationLogger logger;
   private PrintStream log;
   protected boolean DEBUG = false;
 
-  public IOUnit(String id, int[] memory, int offset) {
-    this(id, id, memory, offset);
+  public IOUnit(String id, MSP430Core cpu, int[] memory, int offset) {
+    this(id, id, cpu, memory, offset);
   }
 
-  public IOUnit(String id, String name, int[] memory, int offset) {
+  public IOUnit(String id, String name, MSP430Core cpu, int[] memory, int offset) {
     this.id = id;
     this.name = name;
+    this.cpu = cpu;
     this.memory = memory;
     this.offset = offset;
   }
 
   public void addStateChangeListener(StateChangeListener listener) {
-      scListeners = (StateChangeListener[]) ArrayUtils.add(StateChangeListener.class, scListeners, listener);
-    }
-    
+      stateListener = StateChangeListener.Proxy.INSTANCE.add(stateListener, listener);
+  }
+
   public void removeStateChangeListener(StateChangeListener listener) {
-      scListeners = (StateChangeListener[]) ArrayUtils.remove(scListeners, listener);
+      stateListener = StateChangeListener.Proxy.INSTANCE.remove(stateListener, listener);
   }
 
 
@@ -84,16 +80,14 @@ public abstract class IOUnit implements InterruptHandler, Loggable {
       stateChanged(newState, false);
   }
   /* Called by subclasses to inform about changes of state */
-    protected void stateChanged(int newState, boolean forceCallback) {
+  protected void stateChanged(int newState, boolean forceCallback) {
       if (forceCallback || ioState != newState) {
           int oldState = ioState;
           ioState = newState;
           /* inform listeners */
-          StateChangeListener[] listeners = scListeners;
-          if (listeners != null) {
-              for (int i = 0, n = listeners.length; i < n; i++) {
-                  listeners[i].stateChanged(this, oldState, ioState);
-              }
+          StateChangeListener listener = stateListener;
+          if (listener != null) {
+              listener.stateChanged(this, oldState, ioState);
           }
       }
   }
@@ -103,22 +97,11 @@ public abstract class IOUnit implements InterruptHandler, Loggable {
 
   // write
   // write a value to the IO unit
-  public abstract void write(int address, int value, boolean word,
-			     long cycles);
+  public abstract void write(int address, int value, boolean word, long cycles);
 
   // read
   // read a value from the IO unit
   public abstract int read(int address, boolean word, long cycles);
-
-  // Utility function for converting 16 bits data to correct return
-  // value depending on address alignment and word/byte mode
-  public static int return16(int address, int data, boolean word) {
-    if (word) return data;
-    // First byte => low byte
-    if ((address & 1) == 0) return data & 0xff;
-    // Second byte => hi byte
-    return (data >> 8) & 0xff;
-  }
 
   public String getID() {
       return id;

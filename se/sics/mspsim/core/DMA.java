@@ -130,12 +130,13 @@ public class DMA extends IOUnit {
             /* perform memory move and possibly clear triggering flag!!! */
             /* NOTE: show config byte/word also !!! */
             if (enable) {
-                int data = cpu.read(currentSourceAddress, MSP430Constants.MODE_BYTE);
+                int data = cpu.currentSegment.read(currentSourceAddress, Memory.AccessMode.BYTE, Memory.AccessType.READ);
                 if (DEBUG) log("DMA Triggered reading from: " +
                         currentSourceAddress + " => " + data + " " + (char) data +
                         " size:" + size + " index:" + index);
-                trigger.clearDMATrigger(index);
-                DMA.this.cpu.write(currentDestinationAddress, data, MSP430Constants.MODE_BYTE);
+                // flag already cleared by the memory read above
+//                trigger.clearDMATrigger(index);
+                DMA.this.cpu.currentSegment.write(currentDestinationAddress, data, Memory.AccessMode.BYTE);
                 
                 currentSourceAddress += srcIncr;
                 currentDestinationAddress += dstIncr;
@@ -160,24 +161,31 @@ public class DMA extends IOUnit {
         public String getName() {
             return "DMA Channel " + channelNo;
         }
+
+        public String info() {
+            return getName() + (enable ? " Enabled " : " Disabled")
+                    + "  Index: " + triggerIndex + "  Trigger: " + trigger
+                    + "\n    current source: 0x"
+                    + cpu.getAddressAsString(currentSourceAddress)
+                    + " destination: 0x"
+                    + cpu.getAddressAsString(currentDestinationAddress)
+                    + "  size: " + (storedSize - size) + "/" + storedSize;
+        }
     }
 
     private Channel channels[] = new Channel[3];
     private int dmactl0;
     private int dmactl1;
-    
-    MSP430Core cpu;
-    
+
     /* MAX 16 triggers ? */
     private DMATrigger[] dmaTrigger = new DMATrigger[16];
     private int[] dmaTriggerIndex = new int[16];
     
-    public DMA(String id, int[] memory, int offset, MSP430Core msp430Core) {
-        super(id, memory, offset);
+    public DMA(String id, MSP430Core cpu, int[] memory, int offset) {
+        super(id, cpu, memory, offset);
         channels[0] = new Channel(0);
         channels[1] = new Channel(1);
         channels[2] = new Channel(2);
-        this.cpu = msp430Core;
     }
 
     public void setInterruptMultiplexer(InterruptMultiplexer interruptMultiplexer) {
@@ -206,7 +214,7 @@ public class DMA extends IOUnit {
     }
 
     public void write(int address, int value, boolean word, long cycles) {
-        if (DEBUG) log("DMA write to: " + Utils.hex16(address) + ": " + value);
+        if (DEBUG) log("DMA write to: " + Utils.hex(address, 4) + ": " + value);
         switch (address) {
         case DMACTL0:
             /* DMA Control 0 */
@@ -240,4 +248,14 @@ public class DMA extends IOUnit {
             return c.read(address & 7);
         }
     }
+
+    public String info() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  DMACTL0: 0x" + Utils.hex16(dmactl0) + "  DMACTL1: 0x" + Utils.hex16(dmactl1));
+        for (Channel c : channels) {
+            sb.append("\n  ").append(c.info());
+        }
+        return sb.toString();
+    }
+
 }

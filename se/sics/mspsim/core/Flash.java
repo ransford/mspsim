@@ -37,6 +37,7 @@ package se.sics.mspsim.core;
 
 import java.util.Arrays;
 
+import se.sics.mspsim.core.Memory.AccessMode;
 import se.sics.mspsim.util.Utils;
 import edu.umass.energy.Capacitor;
 
@@ -100,10 +101,8 @@ public class Flash extends IOUnit {
 
   private static final int FN_MASK = 0x3f;
 
-  private final MSP430Core cpu;
   private FlashRange main_range;
   private FlashRange info_range;
-  private int[] memory;
   
   private int mode;      /* FCTL1 */
   private int clockcfg;  /* FCTL2 */
@@ -170,9 +169,7 @@ public class Flash extends IOUnit {
   
   public Flash(MSP430Core cpu, int[] memory, FlashRange main_range,
       FlashRange info_range, int offset) {
-    super("Flash", "Internal Flash", memory, offset);
-    this.cpu = cpu;
-    this.memory = memory;
+    super("Flash", "Internal Flash", cpu, memory, offset);
     this.main_range = main_range;
     this.info_range = info_range;
     locked = true;
@@ -261,7 +258,8 @@ public class Flash extends IOUnit {
     }
   }
 
-  public void flashWrite(int address, int data, boolean word) {
+  
+  public void flashWrite(int address, int data, AccessMode dataMode) {
     int wait_time = -1;
     
     if (locked) {
@@ -287,9 +285,9 @@ public class Flash extends IOUnit {
       int area_end = a_area_end[0];
       
       if (DEBUG) {
-	log("Segment erase @" + Utils.hex16(address) + 
-	    ": erasing area " + Utils.hex16(area_start) + "-" +
-	    Utils.hex16(area_end));
+	log("Segment erase @" + Utils.hex(address, 4) + 
+	    ": erasing area " + Utils.hex(area_start, 4) + "-" +
+	    Utils.hex(area_end, 4));
       }
       for (int i = area_start; i < area_end; i++) {
 	memory[i] = 0xff;
@@ -320,7 +318,7 @@ public class Flash extends IOUnit {
         if (blockwriteCount == 0) {
           wait_time = BLOCKWRITE_FIRST_TIME;
           if (DEBUG) {
-            log("Flash write in block mode started @" + Utils.hex16(address));
+            log("Flash write in block mode started @" + Utils.hex(address, 4));
           }
           if (addressInFlash(cpu.getPC())) {
             logw("Oops. Block write access only allowed when executing from RAM.");
@@ -333,11 +331,16 @@ public class Flash extends IOUnit {
       }
       /* Flash memory allows clearing bits only */
       memory[address] &= data & 0xff;
-      if (word) {
+      if (dataMode != AccessMode.BYTE) {
           memory[address + 1] &= (data >> 8) & 0xff;
+          if (dataMode == AccessMode.WORD20) {
+              /* TODO should the write really write the full word? CHECK THIS */
+              memory[address + 2] &= (data >> 16) & 0xff;
+              memory[address + 3] &= (data >> 24) & 0xff;
+          }
       }
       if (DEBUG) {
-        log("Writing " + data + " to $" + Utils.hex16(address));
+        log("Writing $" + Utils.hex20(data) + " to $" + Utils.hex(address, 4) + " (" + dataMode.bytes + " bytes)");
       }
       waitFlashProcess(wait_time);
       break;
@@ -352,8 +355,8 @@ public class Flash extends IOUnit {
     if (DEBUG) {
       if (wait == false && currentWriteMode == WriteMode.WRITE_BLOCK) {
 	log("Reading flash prohibited. Would read 0x3fff!!!"); 
-	log("CPU PC=$" + Utils.hex16(cpu.getPC()) 
-	    + " read address=" + Utils.hex16(address));
+	log("CPU PC=$" + Utils.hex(cpu.getPC(), 4) 
+	    + " read address $" + Utils.hex(address, 4));
       }
     }
   }
@@ -467,7 +470,7 @@ public class Flash extends IOUnit {
   }
   
   private void triggerAccessViolation(String reason) {
-    logw("Access violation: " + reason + ". PC=$" + Utils.hex16(cpu.getPC()));
+    logw("Access violation: " + reason + ". PC=$" + Utils.hex(cpu.getPC(), 4));
 
     statusreg |= ACCVIFG;
     if (cpu.getSFR().isIEBitsSet(SFR.IE1, ACCVIE)) {

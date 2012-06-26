@@ -104,8 +104,6 @@ public class ADC12 extends IOUnit {
   public static final int CONSEQ_REPEAT_SEQUENCE = 0x03;
   public static final int CONSEQ_SEQUENCE_MASK = 0x01;
 
-  private final MSP430Core core;
-  
   private int adc12ctl0 = 0;
   private int adc12ctl1 = 0;
   private int[] adc12mctl = new int[16]; 
@@ -135,7 +133,7 @@ public class ADC12 extends IOUnit {
 
   private TimeEvent adcTrigger = new TimeEvent(0) {
     public void execute(long t) {
-//      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + core.cycles);
+//      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + cpu.cycles);
       convert();
       core.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
     }
@@ -143,8 +141,7 @@ public class ADC12 extends IOUnit {
 
   
   public ADC12(MSP430Core cpu) {
-    super("ADC12", cpu.memory, 0);
-    core = cpu;
+    super("ADC12", cpu, cpu.memory, 0);
   }
 
   public void reset(int type) {
@@ -195,7 +192,7 @@ public class ADC12 extends IOUnit {
         isConverting = true;
         adc12Pos = startMem;
         int delay = adcDiv * ((adc12Pos < 8 ? shTime0 : shTime1) + 13);
-        core.scheduleTimeEvent(adcTrigger, core.getTime() + delay);
+        cpu.scheduleTimeEvent(adcTrigger, cpu.getTime() + delay);
       }
       break;
     case ADC12CTL1:
@@ -253,7 +250,7 @@ public class ADC12 extends IOUnit {
         adc12ifg &= ~(1 << reg);
 //        System.out.println("Read ADCMEM" + (reg / 2));        
         if (adc12iv == reg * 2 + 6) {
-          core.flagInterrupt(adc12Vector, this, false);
+          cpu.flagInterrupt(adc12Vector, this, false);
           adc12iv = 0;
 //          System.out.println("** de-Trigger ADC12 IRQ for ADCMEM" + adc12Pos);
         }
@@ -280,7 +277,7 @@ public class ADC12 extends IOUnit {
       // This should check if there already is an higher iv!
       adc12iv = adc12Pos * 2 + 6;
       //System.out.println("** Trigger ADC12 IRQ for ADCMEM" + adc12Pos);
-      core.flagInterrupt(adc12Vector, this, true);
+      cpu.flagInterrupt(adc12Vector, this, true);
     }
     if ((conSeq & CONSEQ_SEQUENCE_MASK) != 0) {
       // Increase
@@ -298,7 +295,7 @@ public class ADC12 extends IOUnit {
       isConverting = false;
     } else {
       int delay = adcDiv * ((adc12Pos < 8 ? shTime0 : shTime1) + 13);
-      core.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
+      cpu.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
     }
     int delay = adcDiv * (shTime0 + 13) + 647/*XXX*/;
     System.err.println("cycles="+core.cycles);

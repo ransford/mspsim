@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2008, Swedish Institute of Computer Science.
+ * Copyright (c) 2008-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,15 +27,11 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
  * -----------------------------------------------------------------
  * TR1001
  *
  * Authors : Joakim Eriksson, Niclas Finne
  * Created : 11 mar 2008
- * Updated : $Date$
- *           $Rev$
  */
 
 package se.sics.mspsim.chip;
@@ -65,7 +61,7 @@ public class TR1001 extends Chip implements RFListener, RFSource {
     this.usart = usart;
     setModeNames(MODE_NAMES);
     setMode(MODE_TXRX_OFF);
-    usart.setUSARTListener(new USARTListener() {
+    usart.addUSARTListener(new USARTListener() {
 
       public void dataReceived(USARTSource source, int data) {
         RFListener listener = rfListener;
@@ -78,9 +74,7 @@ public class TR1001 extends Chip implements RFListener, RFSource {
           listener.receivedByte((byte) (data & 0xff));
         }
       }
-
-      public void stateChanged(int state) {
-      }});
+    });
   }
 
   public void setMode(int mode) {
@@ -96,8 +90,14 @@ public class TR1001 extends Chip implements RFListener, RFSource {
       return "Radio State: " + getModeName(getMode());
   }
 
-  public void setRFListener(RFListener rfListener) {
-    this.rfListener = rfListener;
+  @Override
+  public synchronized void addRFListener(RFListener rf) {
+    rfListener = RFListener.Proxy.INSTANCE.add(rfListener, rf);
+  }
+
+  @Override
+  public synchronized void removeRFListener(RFListener rf) {
+    rfListener = RFListener.Proxy.INSTANCE.remove(rfListener, rf);
   }
 
   /* Receive a byte from the radio medium

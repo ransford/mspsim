@@ -41,16 +41,13 @@
 
 package se.sics.mspsim.platform.jcreate;
 import java.io.IOException;
-
-import se.sics.mspsim.chip.FileM25P80;
+import se.sics.mspsim.chip.FileStorage;
 import se.sics.mspsim.chip.Leds;
 import se.sics.mspsim.chip.M25P80;
 import se.sics.mspsim.chip.MMA7260QT;
 import se.sics.mspsim.core.ADC12;
 import se.sics.mspsim.core.ADCInput;
 import se.sics.mspsim.core.IOPort;
-import se.sics.mspsim.core.IOUnit;
-import se.sics.mspsim.core.USART;
 import se.sics.mspsim.core.USARTSource;
 import se.sics.mspsim.platform.sky.CC2420Node;
 import se.sics.mspsim.util.ArgumentManager;
@@ -117,28 +114,28 @@ public class JCreateNode extends CC2420Node {
         super.setupNodePorts();
         leds = new Leds(cpu, LEDS);
         accelerometer = new MMA7260QT(cpu);
-        IOUnit io = cpu.getIOUnit("ADC12");
-        if (io instanceof ADC12) {
-            ADC12 adc = (ADC12) io;
-            adc.setADCInput(4, new ADCInput() {
-                public int nextData() {
-                    return accelerometer.getADCX();
-                }
-            });
-            adc.setADCInput(5, new ADCInput() {
-                public int nextData() {
-                    return accelerometer.getADCY();
-                }
-            });
-            adc.setADCInput(6, new ADCInput() {
-                public int nextData() {
-                    return accelerometer.getADCZ();
-                }
-            });
-        }
+        ADC12 adc = cpu.getIOUnit(ADC12.class, "ADC12");
+        adc.setADCInput(4, new ADCInput() {
+            public int nextData() {
+                return accelerometer.getADCX();
+            }
+        });
+        adc.setADCInput(5, new ADCInput() {
+            public int nextData() {
+                return accelerometer.getADCY();
+            }
+        });
+        adc.setADCInput(6, new ADCInput() {
+            public int nextData() {
+                return accelerometer.getADCZ();
+            }
+        });
 
+        if (getFlash() == null) {
+            setFlash(new M25P80(cpu));
+        }
         if (flashFile != null) {
-            setFlash(new FileM25P80(cpu, flashFile));
+            getFlash().setStorage(new FileStorage(flashFile));
         }
     }
 

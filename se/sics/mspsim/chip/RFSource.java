@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007,2008,2009, Swedish Institute of Computer Science.
+ * Copyright (c) 2007-2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,8 +27,6 @@
  *
  * This file is part of MSPSim.
  *
- * $Id: RFListener.java 281 2008-05-13 15:18:14Z joxe$
- *
  * -----------------------------------------------------------------
  *
  * RFSource
@@ -40,5 +38,8 @@
 package se.sics.mspsim.chip;
 
 public interface RFSource {
-  void setRFListener(RFListener listener);
+
+    void addRFListener(RFListener listener);
+    void removeRFListener(RFListener listener);
+
 }

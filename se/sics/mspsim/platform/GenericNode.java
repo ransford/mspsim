@@ -156,7 +156,7 @@ public abstract class GenericNode extends Chip implements Runnable {
       }
     }
 
-    int[] memory = cpu.getMemory();
+    int[] memory = cpu.memory;
     if (firmwareFile.endsWith("ihex")) {
       // IHEX Reading
       IHexReader reader = new IHexReader();
@@ -356,7 +356,7 @@ public abstract class GenericNode extends Chip implements Runnable {
   }
   
   public void stop() {
-    cpu.setRunning(false);
+    cpu.stop();
   }
   
   public void step() throws EmulationException {
@@ -365,7 +365,18 @@ public abstract class GenericNode extends Chip implements Runnable {
     }
   }
 
-  public ELF loadFirmware(URL url, int[] memory) throws IOException {
+  // A step that will break out of breakpoints!
+  public void step(int nr) throws EmulationException {
+    if (!cpu.isRunning()) {
+      cpu.stepInstructions(nr);
+    }
+  }
+
+  public ELF loadFirmware(URL url) throws IOException {
+      return loadFirmware(url, cpu.memory);
+  }
+
+  @Deprecated public ELF loadFirmware(URL url, int[] memory) throws IOException {
     DataInputStream inputStream = new DataInputStream(url.openStream());
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
     byte[] firmwareData = new byte[2048];
@@ -379,12 +390,22 @@ public abstract class GenericNode extends Chip implements Runnable {
     return loadFirmware(elf, memory);
   }
 
-  public ELF loadFirmware(String name, int[] memory) throws IOException {
+  public ELF loadFirmware(String name) throws IOException {
+      return loadFirmware(name, cpu.memory);
+  }
+
+  @Deprecated public ELF loadFirmware(String name, int[] memory) throws IOException {
     return loadFirmware(ELF.readELF(firmwareFile = name), memory);
   }
 
-  public ELF loadFirmware(ELF elf, int[] memory) {
-    stop();
+  public ELF loadFirmware(ELF elf) {
+      return loadFirmware(elf, cpu.memory);
+  }
+
+  @Deprecated public ELF loadFirmware(ELF elf, int[] memory) {
+    if (cpu.isRunning()) {
+        stop();
+    }
     this.elf = elf;
     elf.loadPrograms(memory);
     MapTable map = elf.getMap();
@@ -393,13 +414,6 @@ public abstract class GenericNode extends Chip implements Runnable {
     registry.registerComponent("elf", elf);
     registry.registerComponent("mapTable", map);
     return elf;
-  }
-  
-  // A step that will break out of breakpoints!
-  public void step(int nr) throws EmulationException {
-    if (!cpu.isRunning()) {
-      cpu.stepInstructions(nr);
-    }
   }
 
   public int getConfiguration(int param) {

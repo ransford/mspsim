@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007, Swedish Institute of Computer Science.
+ * Copyright (c) 2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,26 +27,46 @@
  *
  * This file is part of MSPSim.
  *
- * $Id: $
- *
  * -----------------------------------------------------------------
  *
  * Memory
  *
  * Author  : Joakim Eriksson
  * Created : Sept 15 22:00:00 2008
- * Updated : $Date: 2008-03-11 16:32:12 +0100 (ti, 11 mar 2008) $
- *           $Revision: 177 $
  */
 package se.sics.mspsim.core;
 
 public interface Memory {
 
-  public int readByte(int address);
-  public void writeByte(int address, int data);
-  
-  /**
-   * getSize returns the size of memory in bytes.
-   */
-  public int getSize();
+    public static final int SEGMENT_SIZE = 256;
+
+    public enum AccessType {
+        READ,    /* normal read */
+        EXECUTE, /* instruction execution read */
+        ARG,     /* arguments for execution */
+        WRITE    /* write */
+    };
+
+    public enum AccessMode {
+        BYTE(1, 8, 0xff),
+        WORD(2, 16, 0xffff),
+        WORD20(3, 20, 0xfffff);
+
+        public final int bytes;
+        public final int bitSize;
+        public final int mask; 
+
+        AccessMode(int bytes, int bitSize, int mask) {
+            this.bytes = bytes;
+            this.bitSize = bitSize;
+            this.mask = mask;
+        }
+    };
+
+    public int read(int address, AccessMode mode, AccessType type) throws EmulationException;
+    public void write(int dstAddress, int data, AccessMode mode) throws EmulationException;
+
+    public int get(int address, AccessMode mode);
+    public void set(int address, int data, AccessMode mode);
+
 }

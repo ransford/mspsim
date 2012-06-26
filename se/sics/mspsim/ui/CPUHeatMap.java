@@ -11,10 +11,11 @@ import java.awt.image.BufferedImage;
 import javax.swing.JComponent;
 import javax.swing.Timer;
 
-import se.sics.mspsim.core.CPUMonitor;
+import se.sics.mspsim.core.Memory;
+import se.sics.mspsim.core.MemoryMonitor;
 import se.sics.mspsim.core.MSP430Core;
 
-public class CPUHeatMap extends JComponent implements CPUMonitor {
+public class CPUHeatMap extends JComponent implements MemoryMonitor {
 
     private static final long serialVersionUID = -7964848220064713887L;
 
@@ -114,24 +115,42 @@ public class CPUHeatMap extends JComponent implements CPUMonitor {
         g.drawImage(heatmap, 0, 0, getWidth(), getHeight(), this);
     }
 
-    public void cpuAction(int type, int adr, int data) {
+    private void cpuAction(int adr, Memory.AccessType type) {
         int val = 0;
         int f = 1;
         if (mode == 1) f = 40;
         switch (type) {
-        case CPUMonitor.EXECUTE:
+        case EXECUTE:
             val = heatE[adr] = heatE[adr] + f;
             break;
-        case CPUMonitor.MEMORY_READ:
+        case READ:
             val = heatR[adr] = heatR[adr] + f;
             break;
-        case CPUMonitor.MEMORY_WRITE:
+        case WRITE:
             val = heatW[adr] = heatW[adr] + f;
             break;
         }
         if (val > heatMax) {
             heatMax = val;
         }
+    }
+
+    @Override
+    public void notifyReadBefore(int addr, Memory.AccessMode mode, Memory.AccessType type) {
+        cpuAction(addr, type);
+    }
+
+    @Override
+    public void notifyReadAfter(int addr, Memory.AccessMode mode, Memory.AccessType type) {
+    }
+
+    @Override
+    public void notifyWriteBefore(int dstAddress, int data, Memory.AccessMode mode) {
+        cpuAction(dstAddress, Memory.AccessType.WRITE);
+    }
+
+    @Override
+    public void notifyWriteAfter(int dstAddress, int data, Memory.AccessMode mode) {
     }
 
 }

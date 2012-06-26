@@ -29,7 +29,7 @@ public class GenericUSCI extends IOUnit implements DMATrigger, USARTSource {
 
     public static final int SWRST = 0x01;
     
-    private USARTListener listener;
+    private USARTListener usartListener;
 
     private int ubr0;
     private int ubr1;
@@ -61,9 +61,8 @@ public class GenericUSCI extends IOUnit implements DMATrigger, USARTSource {
     /* always on for now - but SWRST controls it */
     private boolean moduleEnabled = true;
 
-    protected MSP430Core cpu;
-    private int uartIndex;
-    private int vector;
+    private final int uartIndex;
+    private final int vector;
 
     private TimeEvent txTrigger = new TimeEvent(0) {
         public void execute(long t) {
@@ -74,11 +73,9 @@ public class GenericUSCI extends IOUnit implements DMATrigger, USARTSource {
 
 
     public GenericUSCI(MSP430Core cpu, int uartIndex, int[] memory, MSP430Config config) {
-        super(config.uartConfig[uartIndex].name, config.uartConfig[uartIndex].name, memory,
-                config.uartConfig[uartIndex].offset);
+        super(config.uartConfig[uartIndex].name, cpu, memory, config.uartConfig[uartIndex].offset);
         /* do some stuff ? */
         
-        this.cpu = cpu;
         this.uartIndex = uartIndex;
         MSP430Config.UARTConfig uartConfig = config.uartConfig[uartIndex];
 
@@ -148,6 +145,7 @@ public class GenericUSCI extends IOUnit implements DMATrigger, USARTSource {
 
         if (transmitting) {
             /* in this case we have shifted out the last character */
+            USARTListener listener = this.usartListener;
             if (listener != null && txShiftReg != -1) {
                 listener.dataReceived(this, txShiftReg);
             }
@@ -331,8 +329,14 @@ public class GenericUSCI extends IOUnit implements DMATrigger, USARTSource {
     }
 
     /* reuse USART listener API for USCI */
-    public void setUSARTListener(USARTListener listener) {
-        this.listener = listener;
+    @Override
+    public synchronized void addUSARTListener(USARTListener listener) {
+        usartListener = USARTListener.Proxy.INSTANCE.add(usartListener, listener);
+    }
+
+    @Override
+    public synchronized void removeUSARTListener(USARTListener listener) {
+        usartListener = USARTListener.Proxy.INSTANCE.remove(usartListener, listener);
     }
 
     /*  default behavior assumes UART/SPI config */

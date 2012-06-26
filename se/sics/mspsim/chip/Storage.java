@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2007, Swedish Institute of Computer Science.
+ * Copyright (c) 2012, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,28 +27,30 @@
  *
  * This file is part of MSPSim.
  *
- * $Id$
- *
- * -----------------------------------------------------------------
- *
- * CPUMonitor
- *
- * Author  : Joakim Eriksson
- * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
  */
+package se.sics.mspsim.chip;
 
-package se.sics.mspsim.core;
+import java.io.IOException;
 
-public interface CPUMonitor {
+/**
+ * @author Niclas Finne
+ */
+public interface Storage {
 
-  public static final int MEMORY_READ = 1;
-  public static final int MEMORY_WRITE = 2;
-  public static final int REGISTER_READ = 3;
-  public static final int REGISTER_WRITE = 4;
-  public static final int EXECUTE = 5;
+    public int read(long pos, byte[] buffer) throws IOException;
 
-  public void cpuAction(int type, int adr, int data);
+    public int read(long pos, byte[] buffer, int offset, int len) throws IOException;
+
+    public void write(long pos, byte[] buffer) throws IOException;
+
+    public void write(long pos, byte[] buffer, int offset, int len) throws IOException;
+
+    public long getMaxSize();
+
+    public void setMaxSize(long size);
+
+    public void close();
+
+    public String info();
 
 }
