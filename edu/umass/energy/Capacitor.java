@@ -117,7 +117,7 @@ public class Capacitor extends IOUnit {
     public Capacitor (MSP430 msp, double C, double initVoltage,
             double inputVoltageDividerFactor,
             double inputVoltageReferenceVoltage) {
-        super("capacitor", msp.memory, voltageReaderAddress);
+        super("capacitor", msp, msp.memory, voltageReaderAddress);
         cpu = msp;
         capacitance = C;
         this.effectiveMaxVoltage =

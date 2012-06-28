@@ -140,9 +140,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
   final ComponentRegistry registry;
   Profiler profiler;
   boolean resetProfiler = true;
-  private Flash flash;
-
-  boolean isFlashBusy;
 
   /* begin mementos */
   public boolean inCheckpoint = false; // XXX note gross SimpleProfiler hacks

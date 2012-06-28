@@ -84,13 +84,13 @@ public class MSP430 extends MSP430Core {
             3.0 /* voltage divider factor */, // XXX WISPism
             2.5 /* voltage check reference voltage */); // XXX WISPism
 
-    /* trap reads to Capacitor.voltageReaderAddress */
-    memIn[Capacitor.voltageReaderAddress] =
-        memIn[Capacitor.voltageReaderAddress + 1] = capacitor;
+    // make the capacitor responsible for reads to voltageReaderAddress
+    setIORange(Capacitor.voltageReaderAddress, 2, capacitor);
 
     System.err.println("Set voltage reader to " + capacitor);
-    setRegisterWriteMonitor(SP, new CPUMonitor() {
-              public void cpuAction(int type, int addr, int data) {
+    addRegisterWriteMonitor(SP, new RegisterMonitor.Adapter() {
+              @Override
+              public void notifyWriteBefore(int type, int addr, int data) {
                 int stacksize = map.stackStartAddress - readRegister(SP);
                 if (stacksize == map.stackStartAddress) { return; }
                 System.err.println("TIME/STACKSIZE," + getTimeMillis() + "," +
