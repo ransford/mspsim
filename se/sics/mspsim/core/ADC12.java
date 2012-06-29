@@ -135,7 +135,7 @@ public class ADC12 extends IOUnit {
     public void execute(long t) {
 //      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + cpu.cycles);
       convert();
-      core.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
     }
   };
 
@@ -298,9 +298,9 @@ public class ADC12 extends IOUnit {
       cpu.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
     }
     int delay = adcDiv * (shTime0 + 13) + 647/*XXX*/;
-    System.err.println("cycles="+core.cycles);
+    System.err.println("cycles="+cpu.cycles);
 
-    core.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
+    cpu.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
   }
   
   public void interruptServiced(int vector) {

@@ -188,73 +188,6 @@ public class DebugCommands implements CommandBundle {
             context.exit(0);
         }
       });
-
-      ch.registerCommand("watchwrite",
-              new BasicAsyncCommand("add a write watch to a given address or symbol", "<address or symbol> [length] [char | hex | break]") {
-            int mode = 0;
-            int address = 0;
-            int length = 1;
-            public int executeCommand(final CommandContext context) {
-              int baddr = context.getArgumentAsAddress(0);
-              if (baddr == -1) {
-                context.err.println("unknown symbol: " + context.getArgument(0));
-                return -1;
-              }
-              if (context.getArgumentCount() > 1) {
-                  for (int i = 1; i < context.getArgumentCount(); i++) {
-                      String modeStr = context.getArgument(i);
-                      if (Character.isDigit(modeStr.charAt(0))) {
-                          length = Integer.parseInt(modeStr);
-                      } else if ("char".equals(modeStr)) {
-                          mode = 1;
-                      } else if ("break".equals(modeStr)) {
-                          mode = 2;
-                      } else if ("hex".equals(modeStr)) {
-                          mode = 3;
-                      }
-                  }
-              }
-              CPUMonitor monitor = new CPUMonitor() {
-                  public void cpuAction(int type, int adr, int data) {
-                	  if (type != MEMORY_WRITE) return;
-                      if (mode == 0 || mode == 2) {
-                          int pc = cpu.readRegister(0);
-                          String adrStr = getSymOrAddr(cpu, context, adr);
-                          String pcStr = getSymOrAddrELF(cpu, getELF(), pc);
-                          context.out.println("*** write from " + pcStr +
-                                  ": " + adrStr + " = " + data);
-                          if (mode == 2) {
-                              cpu.stop();
-                          }
-                      } else {
-                          if (length > 1) {
-                              for (int i = address; i < address + length; i++) {
-                                  context.out.print(Utils.toString(cpu.memory[i], Utils.BYTE, mode == 1 ? Utils.ASCII : Utils.HEX));
-                              }
-                              context.out.println();
-                          } else {
-                              context.out.print(Utils.toString(data, Utils.BYTE, mode == 1 ? Utils.ASCII : Utils.HEX));
-                          }
-                      }
-                  }
-              };
-
-              cpu.setBreakPoint(address = baddr, monitor);
-              if (length > 1) {
-                  for (int i = 1; i < length; i++) {
-                      cpu.setBreakPoint(address + i, monitor);
-                }
-              }
-              context.err.println("Watch set at $" + Utils.hex16(baddr));
-              return 0;
-            }
-
-            public void stopCommand(CommandContext context) {
-              cpu.clearBreakPoint(address);
-              context.exit(0);
-            }
-          });
-
       
       ch.registerCommand("watchreg",
           new BasicAsyncCommand("add a write watch to a given register", "<register> [int]") {
@@ -430,7 +363,7 @@ public class DebugCommands implements CommandBundle {
 
             for (int i = stackStart-2; i >= current ; i -= 2) {
               context.out.println(" 0x" + Utils.hex16(i) + " = " +
-                  Utils.hex16(cpu.read(i, MSP430Constants.MODE_WORD)));
+                  Utils.hex16(cpu.memory[i]));
             }
             return 0;
           }
@@ -444,7 +377,7 @@ public class DebugCommands implements CommandBundle {
                   (i < MSP430Constants.REGISTER_NAMES.length) ?
                     getRegisterName(i) + "/" : "",
                   "R" + i,
-                  Utils.hex16(cpu.readRegister(i)));
+                  Utils.hex(cpu.getRegister(i), 4));
             }
             return 0;
           }
@@ -791,7 +724,7 @@ public class DebugCommands implements CommandBundle {
         				"") {
 					public int executeCommand(final CommandContext context) {
 						CheckpointValidator cv =
-							(CheckpointValidator)cpu.registry.getComponent("checkpointing");
+							(CheckpointValidator)cpu.getRegistry().getComponent("checkpointing");
 						int activeBundle = cv.findActiveBundlePointer(cpu.memory);
 						context.out.println((activeBundle == 0xFFFF) ?
 								"No active bundle." :
@@ -821,40 +754,40 @@ public class DebugCommands implements CommandBundle {
                     int cp_stacksize = cpu.memory[addr+1]; // stack portion
                     int cp_globalsize = cpu.memory[addr];  // .data portion
                     if (cp_globalsize + cp_stacksize > 256) {
-                      o.println("No bundle at $" + Utils.hex16(addr) + ".");
+                      o.println("No bundle at $" + Utils.hex(addr, 4) + ".");
                       return 0;
                     }
                     o.println("REGISTERS:");
-                    o.println(" PC/R0: " + Utils.hex16(readWord(addr+2)));
-                    o.println(" SP/R1: " + Utils.hex16(readWord(addr+4)));
-                    o.println("    R2: " + Utils.hex16(readWord(addr+6)));
-                    o.println("    R4: " + Utils.hex16(readWord(addr+8)));
-                    o.println("    R5: " + Utils.hex16(readWord(addr+10)));
-                    o.println("    R6: " + Utils.hex16(readWord(addr+12)));
-                    o.println("    R7: " + Utils.hex16(readWord(addr+14)));
-                    o.println("    R8: " + Utils.hex16(readWord(addr+16)));
-                    o.println("    R9: " + Utils.hex16(readWord(addr+18)));
-                    o.println("   R10: " + Utils.hex16(readWord(addr+20)));
-                    o.println("   R11: " + Utils.hex16(readWord(addr+22)));
-                    o.println("   R12: " + Utils.hex16(readWord(addr+24)));
-                    o.println("   R13: " + Utils.hex16(readWord(addr+26)));
-                    o.println("   R14: " + Utils.hex16(readWord(addr+28)));
-                    o.println("   R15: " + Utils.hex16(readWord(addr+30)));
+                    o.println(" PC/R0: " + Utils.hex(readWord(addr+2), 4));
+                    o.println(" SP/R1: " + Utils.hex(readWord(addr+4), 4));
+                    o.println("    R2: " + Utils.hex(readWord(addr+6), 4));
+                    o.println("    R4: " + Utils.hex(readWord(addr+8), 4));
+                    o.println("    R5: " + Utils.hex(readWord(addr+10), 4));
+                    o.println("    R6: " + Utils.hex(readWord(addr+12), 4));
+                    o.println("    R7: " + Utils.hex(readWord(addr+14), 4));
+                    o.println("    R8: " + Utils.hex(readWord(addr+16), 4));
+                    o.println("    R9: " + Utils.hex(readWord(addr+18), 4));
+                    o.println("   R10: " + Utils.hex(readWord(addr+20), 4));
+                    o.println("   R11: " + Utils.hex(readWord(addr+22), 4));
+                    o.println("   R12: " + Utils.hex(readWord(addr+24), 4));
+                    o.println("   R13: " + Utils.hex(readWord(addr+26), 4));
+                    o.println("   R14: " + Utils.hex(readWord(addr+28), 4));
+                    o.println("   R15: " + Utils.hex(readWord(addr+30), 4));
                     o.println("STACK (" + cp_stacksize + " bytes):");
                     for (int i = cp_stacksize-2; i >= 0; i -= 2) {
-                      o.println(" $" + Utils.hex16(0x300-cp_stacksize+i) + ": "
-                              + Utils.hex16(readWord(addr+32+i)));
+                      o.println(" $" + Utils.hex(0x300-cp_stacksize+i, 4) + ": "
+                              + Utils.hex(readWord(addr+32+i), 4));
                       // XXX remove hard-coded F2131-specific 0x300 addr
                     }
                     o.println("GLOBALS (" + cp_globalsize + " bytes):");
                     for (int i = 0; i < cp_globalsize; i += 2) {
                       o.println(" " +
-                        Utils.hex16(readWord(addr+32+cp_stacksize+i)));
+                        Utils.hex(readWord(addr+32+cp_stacksize+i), 4));
                     }
-                    o.println("END MARKER: " + Utils.hex16(readWord(addr + 32
-                    		+ cp_stacksize + cp_globalsize)));
-                    o.println("NEXT BYTE: " + Utils.hex16(addr + 32 +
-                    		cp_stacksize + cp_globalsize + 2));
+                    o.println("END MARKER: " + Utils.hex(readWord(addr + 32
+                    		+ cp_stacksize + cp_globalsize), 4));
+                    o.println("NEXT BYTE: " + Utils.hex(addr + 32 +
+                    		cp_stacksize + cp_globalsize + 2, 4));
                     return 0;
                   }
                 });

@@ -60,37 +60,20 @@ public class MSP430f2132Config extends MSP430Config {
     // XXX no USARTs in this chip.  can we do USCI?
 
     Multiplier mp = new Multiplier(cpu, cpu.memory, 0);
-    for (int i = 0x130, n = 0x13f; i < n; i++) {
-      cpu.memOut[i] = mp;
-      cpu.memIn[i] = mp;
-    }
+    cpu.setIORange(0x130, 0x0f, mp);
+    ioUnits.add(mp);
 
     // no DMA
 
     // IO ports.  Ports 1 and 2 can generate interrupts
-    IOPort io1, io2;
-    ioUnits.add(io1 = new IOPort(cpu, 1, 2+o, cpu.memory, 0x20));
-    ioUnits.add(io2 = new IOPort(cpu, 2, 3+o, cpu.memory, 0x28));
-    for (int i = 0, n = 8; i < n; i++) {
-      cpu.memOut[0x20 + i] = io1;
-      cpu.memOut[0x28 + i] = io2;
-      cpu.memIn[0x20 + i] = io1;
-      cpu.memIn[0x28 + i] = io2;
-    }
+    ioUnits.add(new IOPort(cpu, 1, 2+o, cpu.memory, 0x20)); // IO1
+    ioUnits.add(new IOPort(cpu, 2, 3+o, cpu.memory, 0x28)); // IO2
 
-    // XXX ports 3 and 4 cannot generate interrupts
-    for (int i = 0, n = 2; i < n; i++) {
-      IOPort p = new IOPort(cpu, (3 + i), 0, cpu.memory, 0x18 + i * 4);
-      ioUnits.add(p);
-      cpu.memOut[0x18 + i * 4] = p;
-      cpu.memOut[0x19 + i * 4] = p;
-      cpu.memOut[0x1a + i * 4] = p;
-      cpu.memOut[0x1b + i * 4] = p;
-      cpu.memIn[0x18 + i * 4] = p;
-      cpu.memIn[0x19 + i * 4] = p;
-      cpu.memIn[0x1a + i * 4] = p;
-      cpu.memIn[0x1b + i * 4] = p;
-    }
+    // ports 3 and 4 cannot generate interrupts
+    ioUnits.add(new IOPort(cpu, 3, 0, cpu.memory, 0x18));
+    ioUnits.add(new IOPort(cpu, 4, 0, cpu.memory, 0x1c));
+    
+    // XXX ADC10
 
     return 3 + 6; // XXX why?
   }

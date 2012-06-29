@@ -441,7 +441,7 @@ public abstract class GenericNode extends Chip implements Runnable {
 		
 		/* report on the contents of memory */
 		CheckpointValidator cv =
-			(CheckpointValidator)cpu.registry.getComponent("checkpointing");
+			(CheckpointValidator)cpu.getRegistry().getComponent("checkpointing");
 		
 		int activeBundle = cv.findActiveBundlePointer(cpu.memory);
 		System.err.println("Active bundle: " + Utils.hex16(activeBundle));
