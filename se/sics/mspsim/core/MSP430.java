@@ -44,7 +44,6 @@ import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.SimpleProfiler;
 
 import edu.umass.energy.Capacitor;
-import edu.umass.energy.EnergyFairy;
 
 public class MSP430 extends MSP430Core {
 
