@@ -188,7 +188,7 @@ public class DebugCommands implements CommandBundle {
             context.exit(0);
         }
       });
-      
+
       ch.registerCommand("watchreg",
           new BasicAsyncCommand("add a write watch to a given register", "<register> [int]") {
         int watchMode = 0;
@@ -424,7 +424,7 @@ public class DebugCommands implements CommandBundle {
             }
         });
 
-        ch.registerCommand("time", new BasicCommand("print the elapsed time", "") {
+        ch.registerCommand("time", new BasicCommand("print the elapse time and cycles", "") {
           public int executeCommand(CommandContext context) {
             long time = ((long)(cpu.getTimeMillis()));
 	    long wallDiff = System.currentTimeMillis() - lastWall;
@@ -718,7 +718,7 @@ public class DebugCommands implements CommandBundle {
                     return 0;
                   }
                 });
-        
+
         ch.registerCommand("findchkpt",
         		new BasicCommand("find the active checkpoint bundle (if any)",
         				"") {
@@ -733,7 +733,7 @@ public class DebugCommands implements CommandBundle {
 						return 0;
 					}
 				});
-        
+
         ch.registerCommand("voltage",
         		new BasicCommand("print the current capacitor voltage", "") {
 					public int executeCommand(CommandContext context) {
@@ -793,23 +793,21 @@ public class DebugCommands implements CommandBundle {
                 });
 
 	ch.registerCommand("checkpt", new BasicCommand("validate checkpoints", "<seg1 addr> <seg2 addr> <cpfunc addr> [logfile pfx]") {
-          public int executeCommand(final CommandContext context) 
+          public int executeCommand(final CommandContext context)
           {
             int f1addr = context.getArgumentAsAddress(0);
             int f2addr = context.getArgumentAsAddress(1);
 	    	int func_addr = context.getArgumentAsAddress(2);
-	    
+
 	    	String logfile = null;
             int gsize;
 
-            
-            
 		    if (func_addr == -1)
 			{
 				context.err.println("checkpoint function not found!");
 				return 1;
 			}
-	
+
 		    int gsize_addr = context.getAddressFromSymbol("GlobalAllocSize");
 		    if (gsize_addr == -1)
 			{
@@ -823,14 +821,13 @@ public class DebugCommands implements CommandBundle {
 		    {
 		    	context.out.println("GlobalAllocSize == "+gsize+" Bytes.");
 		    }
-		    
+
 		    if (context.getArgumentCount() == 4)
             {
             	logfile = context.getArgument(3);
-            } 
+            }
 		    chv.init(f1addr,f2addr, func_addr, gsize, logfile);
-		    
-	    
+
             context.out.println("Checkpoint registered.");
             return 0;
           }

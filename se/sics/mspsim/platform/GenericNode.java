@@ -347,8 +347,7 @@ public abstract class GenericNode extends Chip implements Runnable {
   public void start() {
     if (!cpu.isRunning()) {
       Thread thread = new Thread(this);
-			// Set this thread to normal priority in case the start method was
-			// called
+      // Set this thread to normal priority in case the start method was called
       // from the higher priority AWT thread.
       thread.setPriority(Thread.NORM_PRIORITY);
       thread.start();

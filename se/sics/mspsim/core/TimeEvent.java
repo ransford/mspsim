@@ -51,7 +51,6 @@ public abstract class TimeEvent {
   String name;
   
   protected long time;
-  public long duration = 0;
 
   public TimeEvent(long time) {
     this.time = time;

@@ -463,7 +463,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
   }
 
   public void writeRegister(int r, int value) {
-	int oldval = reg[r];
     // Before the write!
 //    if (value >= MAX_MEM) {
 //        System.out.println("Writing larger than MAX_MEM to " + r + " value:" + value);
@@ -582,7 +581,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
   }
 
   public void setDCOFrq(int frequency, int smclkFrq) {
-    dcoFrq = 1000000; //frequency;
+    dcoFrq = frequency;
     this.smclkFrq = smclkFrq;
     // update last virtual time before updating DCOfactor
     lastVTime = getTime();
@@ -604,9 +603,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
   
   // returns global time counted in max speed of DCOs (~5Mhz)
   public long getTime() {
-    //currentDCOFactor = 1.0 * BasicClockModule.MAX_DCO_FRQ / 1000000;
-    //How many cycles have passed since what?
-    //It looks like lastCyclesTime is only updated on reset
     long diff = cycles - lastCyclesTime;
     return lastVTime + (long) (diff * currentDCOFactor);
   }
@@ -747,7 +743,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	  long cdiff = cycles - cv.getCyclesAtEndOfLastFullCheckpoint();
 	  return (cdiff > 0) ? cdiff : 0;
   }
-  
+
   public void die () {
 	  final long tmpCycles = cycles;
 	  boolean retryLifecycle = false;
@@ -766,7 +762,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     	  retryMemory = gn.getLastMemoryCapture().getMemory();
       }
       try { Thread.sleep(1000); } catch (Exception e) {}
-      
+
       long mementosCycles = 0;
       if (profiler != null) {
   	    profiler.profileReturn(tmpCycles);
@@ -791,7 +787,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       noMoreCheckpointsThisLifecycle = false;
       reset(); // NOTE: doesn't do anything until next start or step
       capacitor.setA(capacitor.getVoltage(), false); //Make sure that A is updated appropriately
-      
+
       if (retryLifecycle) {
     	  isRetry = true;
       } else {
@@ -803,7 +799,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     	  isRetry = false;
       }
   }
-  
+
   private void internalReset() {
     for (int i = 0, n = interruptSource.length; i < n; i++) {
       interruptSource[i] = null;
@@ -816,7 +812,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     servicedInterruptUnit = null;
     servicedInterrupt = -1;
     interruptMax = -1;
-    // writeRegister(SR, 0);
+    writeRegister(SR, 0);
     writeRegister(PC, 0xe000);
    
     cycleEventQueue.removeAll();
@@ -829,7 +825,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     resetIOUnits();
   
     flash.reset(MSP430.RESET_POR);
-  
+
     if (profiler != null) {
         profiler.resetProfile();
     	profiler.resetCallStackPointer();
@@ -1980,7 +1976,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
                   profiler.profileReturn(cpuCycles);
               }
 
-			  if (instruction == RETURN) {
+              if (instruction == RETURN) {
                   //returning from a checkpoint?.  If so, compare saved data to saved snapshot
                   CheckpointValidator chv = (CheckpointValidator)registry.getComponent("checkpointing");
                   //System.out.println("Checkpoint check!");
@@ -2179,7 +2175,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       writeRegister(SR, sr);
     }
 
-	  while (cycles >= nextEventCycles)
+      while (cycles >= nextEventCycles)
       executeEvents();
     
     cpuCycles += cycles - startCycles;
