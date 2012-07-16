@@ -101,6 +101,15 @@ public class CommandContext {
     return args[index + 1];
   }
   
+  public int getAddressFromSymbol(String sym)
+	{
+		if (mapTable != null)
+  		{
+			return mapTable.getFunctionAddress(sym);
+		}
+		return -1;
+	}
+
   public int getArgumentAsAddress(int index) {
     String adr = getArgument(index);
     if (adr == null || adr.length() == 0) return 0;
