@@ -324,6 +324,9 @@ public class DebugCommands implements CommandBundle {
                 context.err.println("Can not single step when emulation is running.");
                 return -1;
             }
+            DbgInstruction dbg = cpu.getDisAsm().disassemble(cpu.getPC(),
+                cpu.memory, cpu.reg, new DbgInstruction(), 0);
+            context.out.println(dbg.getASMLine(false));
             try {
               node.step(nr);
             } catch (Exception e) {
