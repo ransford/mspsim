@@ -362,11 +362,16 @@ public class DebugCommands implements CommandBundle {
             int stackEnd = context.getMapTable().heapStartAddress;
             int stackStart = context.getMapTable().stackStartAddress;
             int current = cpu.getSP();
-            context.out.println("Current stack: $" + cpu.getAddressAsString(current) + " (" + (stackStart - current) + " used of " + (stackStart - stackEnd) + ')');
+            context.out.println("Current stack: $" +
+                cpu.getAddressAsString(current) + " (" + (stackStart - current)
+                + " used of " + (stackStart - stackEnd) + ')');
 
-            for (int i = stackStart-2; i >= current ; i -= 2) {
-              context.out.println(" 0x" + Utils.hex16(i) + " = " +
-                  Utils.hex16(cpu.memory[i]));
+            int stackWord = stackStart - 2; // top word of stack
+            while (stackWord >= current) {
+              context.out.println(" 0x" + Utils.hex16(stackWord) + " = " +
+                  Utils.hex16(cpu.memory[stackWord] |
+                      (cpu.memory[stackWord+1] << 8)));
+                stackWord -= 2;
             }
             return 0;
           }
