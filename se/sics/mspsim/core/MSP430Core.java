@@ -515,6 +515,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
         } else {
           setMode(MODE_LPM0); 
         }
+        stopExecution(true);
       } else {
         setMode(MODE_ACTIVE);
       }
@@ -2098,22 +2099,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
               writeRegister(SR, sr);
               break;
           case 0: // encountered if main() returns
-              long totalCycles = capacitor.accumCycleCount + cycles;
-              long memCycles = totalMementosCycles + // previous lifecycles
-                  profiler.getMementosCycles();        // this lifecycle
-              throw new StopExecutionException(readRegister(15),
-                      "Encountered opcode 0 after " +
-                      totalCycles + " cycles " +
-                      "in " + capacitor.getNumLifecycles() + " lifecycles; " +
-                      "R15=" + Utils.hex16(readRegister(15)) +
-                      "; PC=" + Utils.hex16(memory[readRegister(PC)]) +
-                      "; prev PC=" + Utils.hex16(previousPC) +
-                      "; SP=" + Utils.hex16(memory[readRegister(SP)]) +
-                      "; wasted=" + totalWastedCycles +
-                      " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
-                      "; mementosCycles()=" + memCycles +
-                      " (" + (100.0 * memCycles / totalCycles) + "%)"
-                      );
+              stopExecution(false);
           default:
               String address = getAddressAsString(pc);
               logw("DoubleOperand not implemented: op = " + Integer.toHexString(op) + " at " + address);
@@ -2188,7 +2174,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       }
     }
 
-    previousPC = pc;
+    previousPC = pcBefore;
     
     /* return the address that was executed */
     return pcBefore;
@@ -2297,5 +2283,24 @@ public class MSP430Core extends Chip implements MSP430Constants,
       }
     }
     noMoreCheckpointsThisLifecycle = true;
+  }
+
+  public void stopExecution (boolean cpuOff) throws StopExecutionException {
+      long totalCycles = capacitor.accumCycleCount + cycles;
+      long memCycles = totalMementosCycles + // previous lifecycles
+          profiler.getMementosCycles();        // this lifecycle
+      throw new StopExecutionException(readRegister(15),
+              (cpuOff ? "CPUOFF after " : "Encountered opcode 0 after ") +
+              totalCycles + " cycles " +
+              "in " + capacitor.getNumLifecycles() + " lifecycles; " +
+              "R15=" + Utils.hex16(readRegister(15)) +
+              "; PC=" + Utils.hex16(readRegister(PC)) +
+              "; prev PC=" + Utils.hex16(previousPC) +
+              "; SP=" + Utils.hex16(readRegister(SP)) +
+              "; wasted=" + totalWastedCycles +
+              " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
+              "; mementosCycles()=" + memCycles +
+              " (" + (100.0 * memCycles / totalCycles) + "%)"
+              );
   }
 }
