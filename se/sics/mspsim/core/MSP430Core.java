@@ -1150,6 +1150,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
             break;
         case MOVA_IND_AUTOINC:
             if (profiler != null && instruction == 0x0110) {
+                // XXX check whether need to throw StopExecutionException?
                 profiler.profileReturn(cpuCycles);
             }
             writeRegister(PC, pc);
@@ -1973,8 +1974,15 @@ public class MSP430Core extends Chip implements MSP430Constants,
               write = true;
               updateStatus = false;
 
-              if (instruction == RETURN && profiler != null) {
-                  profiler.profileReturn(cpuCycles);
+              if (instruction == RETURN) {
+                  if (profiler != null)
+                      profiler.profileReturn(cpuCycles);
+
+                  /* If SP is at top of stack, we're almost certainly returning
+                   * from main(); clang in particular likes to put 'ret' at the
+                   * end of main().  Stop execution. */
+                  if (getSP() == map.stackStartAddress + 2) // XXX hackish
+                      stopExecution("Returned from main()");
               }
 
               if (instruction == RETURN) {
