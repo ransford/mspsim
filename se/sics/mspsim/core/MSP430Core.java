@@ -515,7 +515,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
         } else {
           setMode(MODE_LPM0); 
         }
-        stopExecution(true);
+        stopExecution("CPUOFF");
       } else {
         setMode(MODE_ACTIVE);
       }
@@ -2099,7 +2099,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
               writeRegister(SR, sr);
               break;
           case 0: // encountered if main() returns
-              stopExecution(false);
+              stopExecution("Encountered opcode 0");
           default:
               String address = getAddressAsString(pc);
               logw("DoubleOperand not implemented: op = " + Integer.toHexString(op) + " at " + address);
@@ -2285,12 +2285,12 @@ public class MSP430Core extends Chip implements MSP430Constants,
     noMoreCheckpointsThisLifecycle = true;
   }
 
-  public void stopExecution (boolean cpuOff) throws StopExecutionException {
+  public void stopExecution (String reason) throws StopExecutionException {
       long totalCycles = capacitor.accumCycleCount + cycles;
       long memCycles = totalMementosCycles + // previous lifecycles
           profiler.getMementosCycles();        // this lifecycle
       throw new StopExecutionException(readRegister(15),
-              (cpuOff ? "CPUOFF after " : "Encountered opcode 0 after ") +
+              reason + " after " +
               totalCycles + " cycles " +
               "in " + capacitor.getNumLifecycles() + " lifecycles; " +
               "R15=" + Utils.hex16(readRegister(15)) +
