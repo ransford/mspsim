@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2009, University of Massachusetts.
+ * Copyright (c) 2012, University of Massachusetts.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,8 +87,6 @@ public class MooNode extends GenericNode implements ADCInput {
       ArgumentManager config = new ArgumentManager();
       config.handleArguments(args);
       MooNode node;
-
-      /* XXX figure out whether f2132 or f1611 or what */
 
       node = new MooNode();
       node.setupArgs(config);
