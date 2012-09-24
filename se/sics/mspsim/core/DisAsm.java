@@ -128,6 +128,7 @@ public class DisAsm implements MSP430Constants {
         int srcdata = (instruction & 0x0f00) >> 8;
         int dst = instruction & 0x000f;
         int nextData = memory[pc] + (memory[pc + 1] << 8);
+        boolean rrword = true;
 
         switch(op) {
         case MOVA_IND:
@@ -179,6 +180,26 @@ public class DisAsm implements MSP430Constants {
             break;
         case SUBA_REG:
             opstr = "SUBA R" + srcdata +  ",R" + dst;
+            break;
+        case RRXX_ADDR:
+            rrword = false;
+        case RRXX_WORD:
+            String rrwordStr = rrword ? ".W" : ".A";
+            int count = ((instruction >> 10) & 0x03) + 1; // shift amount
+            switch (instruction & RRMASK) {
+                case RRCM:
+                    opstr = "RRCM" + rrwordStr + " #" + count + ",R" + dst;
+                    break;
+                case RRAM:
+                    opstr = "RRAM" + rrwordStr + " #" + count + ",R" + dst;
+                    break;
+                case RLAM:
+                    opstr = "RLAM" + rrwordStr + " #" + count + ",R" + dst;
+                    break;
+                case RRUM:
+                    opstr = "RRUM" + rrwordStr + " #" + count + ",R" + dst;
+                    break;
+            }
             break;
         }
         
