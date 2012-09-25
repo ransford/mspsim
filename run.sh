@@ -12,9 +12,9 @@ while getopts "hs:t:" opt; do
 done
 shift $(($OPTIND - 1))
 
-FIRMWARE="$1"
+FIRMWARE="$1"; shift
 test -n "$FIRMWARE" || exit 1
-EXTRAFLAGS="$*"
+EXTRAFLAGS="$EXTRAFLAGS $*"
 
 java ${DEBUGOPTS} \
 	-classpath "mspsim.jar:lib/jcommon-1.0.14.jar:lib/jfreechart-1.0.11.jar:lib/jipv6.jar" \
