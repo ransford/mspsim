@@ -1424,6 +1424,11 @@ public class MSP430Core extends Chip implements MSP430Constants,
           /* do not update status after these instructions!!! */
           updateStatus = false;
           switch(op) {
+          case CALLA_REG:
+              dst = readRegister(dstRegister);
+              System.out.println("CALLA REG => " + Utils.hex20(dst));
+              cycles += 5;
+              break;
           case CALLA_IMM:
               dst = (dstRegister << 16) | currentSegment.read(pc, AccessMode.WORD, AccessType.READ);
               pc += 2;
@@ -1474,7 +1479,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
                   regNo = instruction & 0x0f;
 //                  System.out.println("POPM W " + (type == AccessMode.WORD20 ? "A" : "W") + " n: " +
 //                          n + " " + regNo + " at " + Utils.hex16(pcBefore));
-
                   /* read and increase stack pointer n times */
                   for(int i = 0; i < n; i++) {
 		      cycles += 2;
