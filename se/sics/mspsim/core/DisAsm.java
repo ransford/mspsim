@@ -79,6 +79,15 @@ public class DisAsm implements MSP430Constants {
       System.out.println("//// " + fkn);
     }
     System.out.println(dbg.getASMLine());
+
+    /* Hack for printing the instruction after the ext word... */
+    if (dbg.isExtensionWord()) {
+        pc = pc + 2;
+        dbg = disassemble(pc, memory, reg, new DbgInstruction(),
+                interrupt);
+        System.out.println(dbg.getASMLine());
+    }
+    
     return dbg;
   }
 
@@ -240,16 +249,16 @@ public class DisAsm implements MSP430Constants {
         default:
             switch (instruction & 0xff00) {
             case PUSHM_A:
-                opstr = "PUSHM.A #" + ((instruction >> 4) & 0x0f) + ", R" + (instruction & 0x0f);
+                opstr = "PUSHM.A #" + (1 + ((instruction >> 4) & 0x0f)) + ", R" + (instruction & 0x0f);
                 break;
             case PUSHM_W:
-                opstr = "PUSHM.W #" + ((instruction >> 4) & 0x0f) + ", R" + (instruction & 0x0f);
+                opstr = "PUSHM.W #" + (1 + ((instruction >> 4) & 0x0f)) + ", R" + (instruction & 0x0f);
                 break;
             case POPM_A:
-                opstr = "POPM.A #" + ((instruction >> 4) & 0x0f) + ", R" + (instruction & 0x0f);
+                opstr = "POPM.A #" + (1 + ((instruction >> 4) & 0x0f)) + ", R" + (instruction & 0x0f);
                 break;
             case POPM_W:
-                opstr = "POPM.W #" + ((instruction >> 4) & 0x0f) + ", R" + (instruction & 0x0f);
+                opstr = "POPM.W #" + (1 + ((instruction >> 4) & 0x0f)) + ", R" + (instruction & 0x0f);
                 break;                
             }
         }
@@ -332,6 +341,7 @@ public class DisAsm implements MSP430Constants {
                     int dhi = (instruction & EXTWORD_DST);
                     opstr = "ExtWord " + Utils.hex16(instruction) + ":ZC:" + zc + " #:" + rp +
                     " A/L:" + al + " src:" + shi + " dst:" + dhi;
+                    dbg.setExtWord(true);
                 } else {
                     System.out.println("Not implemented instruction: $" + Utils.hex16(instruction) +
                             " at " + Utils.hex16(startPC));
