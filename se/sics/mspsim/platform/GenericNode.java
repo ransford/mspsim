@@ -241,7 +241,7 @@ public abstract class GenericNode extends Chip implements Runnable {
 
   public void setup(ConfigManager config) {
     this.config = config;
-    EmulationLogger logger = (EmulationLogger) registry.getComponent("logger");
+    EmulationLogger logger = registry.getComponent(EmulationLogger.class, "logger");
     if (logger == null) {
       logger= new DefaultEmulationLogger(cpu, System.out);
       registry.registerComponent("logger", logger);
@@ -252,7 +252,7 @@ public abstract class GenericNode extends Chip implements Runnable {
 		registry.registerComponent("checkpointing", checkpointing);
     cpu.setEmulationLogger(logger);
     
-    CommandHandler ch = (CommandHandler) registry.getComponent("commandHandler");
+    CommandHandler ch = registry.getComponent(CommandHandler.class, "commandHandler");
 
     if (ch == null) {
         if (config.getPropertyAsBoolean("jconsole", false)) {
