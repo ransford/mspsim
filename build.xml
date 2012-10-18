@@ -6,7 +6,8 @@
   <property name="src" location="."/>
   <property name="build" location="build"/>
   <property name="lib" location="lib"/>
-  <property name="jarfile" location="mspsim.jar"/>
+  <property name="dist" location="dist"/>
+  <property name="jarfile" location="${dist}/mspsim.jar"/>
   <property name="javac.debug" value="true"/>
 
   <path id="classpath">
@@ -20,6 +21,7 @@
   <target name="init">
     <tstamp/>
     <mkdir dir="${build}"/>
+    <mkdir dir="${dist}"/>
   </target>
 
   <target name="compile" depends="init" description="compile the source">
