@@ -88,7 +88,6 @@ public class MSP430 extends MSP430Core {
 
     System.err.println("Set voltage reader to " + capacitor);
     addRegisterWriteMonitor(SP, new RegisterMonitor.Adapter() {
-              @Override
               public void notifyWriteBefore(int type, int addr, int data) {
                 int stacksize = map.stackStartAddress - readRegister(SP);
                 if (stacksize == map.stackStartAddress) { return; }

@@ -676,8 +676,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
    * @param time
    */
   public void scheduleTimeEvent(TimeEvent event, long time) {
-	  System.err.println("scheduleTimeEvent(" + event + ", " + time + ")");
-	  long prev = vTimeEventQueue.nextTime;
+	// System.err.println("scheduleTimeEvent(" + event + ", " + time + ")");
+    long currentNext = vTimeEventQueue.nextTime;
     vTimeEventQueue.addEvent(event, time);
     if (currentNext != vTimeEventQueue.nextTime) {
       // This is only valid when not having a cycle event queue also...
@@ -691,7 +691,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
         logger.logw(this, WarningType.EMULATION_ERROR, "Scheduling time event backwards in time!!!");
         throw new IllegalStateException("Cycles are passed desired future time...");
       }
-		  nextEventCycles = Math.min(nextEventCycles, cy);
     }
   }
   
