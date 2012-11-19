@@ -38,9 +38,12 @@
 package se.sics.mspsim.core;
 import java.io.PrintStream;
 import java.util.ArrayList;
+
+import se.sics.mspsim.core.EmulationLogger.WarningType;
 import se.sics.mspsim.core.Memory.AccessMode;
 import se.sics.mspsim.core.Memory.AccessType;
 import se.sics.mspsim.util.ComponentRegistry;
+import se.sics.mspsim.util.DefaultEmulationLogger;
 import se.sics.mspsim.util.MapEntry;
 import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.Utils;
@@ -163,6 +166,13 @@ public class MSP430Core extends Chip implements MSP430Constants,
 
   public MSP430Core(int type, ComponentRegistry registry, MSP430Config config) {
     super("MSP430", "MSP430 Core", null);
+
+    logger = registry.getComponent(EmulationLogger.class);
+    if (logger == null) {
+        logger = new DefaultEmulationLogger(this, System.out);
+        registry.registerComponent("logger", logger);
+    }
+    
     MAX_INTERRUPT = config.maxInterruptVector;
     MAX_MEM_IO = config.maxMemIO;
     MAX_MEM = config.maxMem;
@@ -212,14 +222,14 @@ public class MSP430Core extends Chip implements MSP430Constants,
 //    System.out.println("Set up MSP430 Core with " + MAX_MEM + " bytes memory");
 
     /* this is for detecting writes/read to/from non-existing IO */
-    IOUnit voidIO = new IOUnit("void", cpu, memory, 0) {
+    IOUnit voidIO = new IOUnit("void", this, memory, 0) {
         public void interruptServiced(int vector) {
         }
         public void write(int address, int value, boolean word, long cycles) {
-            logw("*** IOUnit write to non-existent IO at $" + Utils.hex(address, 4));
+            cpu.logw(WarningType.VOID_IO_WRITE, "*** IOUnit write to non-existent IO at $" + Utils.hex(address, 4));
         }
         public int read(int address, boolean word, long cycles) {
-            logw("*** IOUnit read from non-existent IO at $" + Utils.hex(address, 4));
+            cpu.logw(WarningType.VOID_IO_READ, "*** IOUnit read from non-existent IO at $" + Utils.hex(address, 4));
             return 0;
         }
     };
@@ -227,6 +237,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     /* setup memory segments */
     int maxSeg = MAX_MEM >> 8;
     Memory ramSegment = new RAMSegment(this);
+    RAMOffsetSegment ramMirrorSegment = null;
     Memory flashSegment = new FlashSegment(this, flash);
     IOSegment ioSegment = new IOSegment(this, MAX_MEM_IO, voidIO);
     Memory noMemorySegment = new NoMemSegment(this);
@@ -234,6 +245,13 @@ public class MSP430Core extends Chip implements MSP430Constants,
         if (config.isRAM(i << 8)) {
 //            System.out.println("Setting RAM segment at: " + Utils.hex16(i << 8));
             memorySegments[i] = ramSegment;
+        } else if (config.isRAMMirror(i << 8)) {
+            if (ramMirrorSegment == null) {
+                ramMirrorSegment = new RAMOffsetSegment(this, config.ramMirrorAddress - config.ramMirrorStart);
+            }
+//            System.out.println("Setting RAM mirror segment at: " + Utils.hex(i << 8, 4)
+//                    + " => " + Utils.hex((i << 8) + ramMirrorSegment.getOffset()));
+            memorySegments[i] = ramMirrorSegment;
         } else if (config.isFlash(i << 8) || config.isInfoMem(i << 8)) {
 //            System.out.println("Setting Flash segment at: " + Utils.hex16(i << 8));
             memorySegments[i] = flashSegment;
@@ -343,7 +361,6 @@ public class MSP430Core extends Chip implements MSP430Constants,
 
   public void addChip(Chip chip) {
     chips.add(chip);
-    chip.setEmulationLogger(logger);
   }
 
   public Chip getChip(String name) {
@@ -662,11 +679,17 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	  System.err.println("scheduleTimeEvent(" + event + ", " + time + ")");
 	  long prev = vTimeEventQueue.nextTime;
     vTimeEventQueue.addEvent(event, time);
-	  if (prev != time) {
-		  long cy = convertVTime(time);
-		  if (cycles > cy) {
-			  logger.warning(this, "Cannot schedule event in the past");
-			  throw new IllegalStateException("Cannot schedule event in the past");
+    if (currentNext != vTimeEventQueue.nextTime) {
+      // This is only valid when not having a cycle event queue also...
+      // if we have it needs to be checked also!
+      nextVTimeEventCycles = convertVTime(vTimeEventQueue.nextTime);
+      if (nextEventCycles > nextVTimeEventCycles) {
+        nextEventCycles = nextVTimeEventCycles;
+      }
+      /* Warn if someone schedules a time backwards in time... */
+      if (cycles > nextVTimeEventCycles) {
+        logger.logw(this, WarningType.EMULATION_ERROR, "Scheduling time event backwards in time!!!");
+        throw new IllegalStateException("Cycles are passed desired future time...");
       }
 		  nextEventCycles = Math.min(nextEventCycles, cy);
     }
@@ -847,10 +870,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
             ("Active checkpoint: " + Utils.hex16(activeBundle)));
   }
 
-  public void setWarningMode(EmulationLogger.WarningMode mode) {
-    if (logger != null) {
-      logger.setWarningMode(mode);
-    }
+  public EmulationLogger getLogger() {
+      return logger;
   }
   
   public void reset() {
@@ -923,29 +944,31 @@ public class MSP430Core extends Chip implements MSP430Constants,
       profiler.profileCall(function, cpuCycles, pc);
   }
   
-  void printWarning(int type, int address) throws EmulationException {
-    String message = null;
-    switch(type) {
-    case MISALIGNED_READ:
-      message = "**** Illegal read - misaligned word from $" +
-      getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
-      break;
-    case MISALIGNED_WRITE:
-      message = "**** Illegal write - misaligned word to $" +
-      getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
-      break;
-    case ADDRESS_OUT_OF_BOUNDS_READ:
-        message = "**** Illegal read - out of bounds from $" +
-        getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
-        break;
-    case ADDRESS_OUT_OF_BOUNDS_WRITE:
-        message = "**** Illegal write -  out of bounds from $" +
-        getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
-        break;
-    }
-    if (logger != null && message != null) {
-      logger.warning(this, message);
-    }
+  void printWarning(EmulationLogger.WarningType type, int address) throws EmulationException {
+      String message;
+      switch(type) {
+      case MISALIGNED_READ:
+          message = "**** Illegal read - misaligned word from $" +
+                  getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
+          break;
+      case MISALIGNED_WRITE:
+          message = "**** Illegal write - misaligned word to $" +
+                  getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
+          break;
+      case ADDRESS_OUT_OF_BOUNDS_READ:
+          message = "**** Illegal read - out of bounds from $" +
+                  getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
+          break;
+      case ADDRESS_OUT_OF_BOUNDS_WRITE:
+          message = "**** Illegal write -  out of bounds from $" +
+                  getAddressAsString(address) + " at $" + getAddressAsString(reg[PC]);
+          break;
+      default:
+          message = "**** " + type + " address $" + getAddressAsString(address) +
+          " at $" + getAddressAsString(reg[PC]);
+          break;
+      }
+      logger.logw(this, type, message);
   }
 
   public void generateTrace(PrintStream out) {
@@ -1855,7 +1878,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	jump = true;
 	break;
       default:
-        logw("Not implemented instruction: #" + Utils.binary16(instruction));
+        logw(WarningType.EMULATION_ERROR, "Not implemented instruction: #" + Utils.binary16(instruction));
       }
       // Perform the Jump
       if (jump) {
@@ -2182,7 +2205,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
               stopExecution("Encountered opcode 0");
           default:
               String address = getAddressAsString(pc);
-              logw("DoubleOperand not implemented: op = " + Integer.toHexString(op) + " at " + address);
+              logw(WarningType.EMULATION_ERROR, 
+                      "DoubleOperand not implemented: op = " + Integer.toHexString(op) + " at " + address);
               if (EXCEPTION_ON_BAD_OPERATION) {
                   EmulationException ex = new EmulationException("Bad operation: $" + Integer.toHexString(op) + " at $" + address);
                   ex.initCause(new Throwable("" + pc));

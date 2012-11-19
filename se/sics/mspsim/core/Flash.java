@@ -37,6 +37,7 @@ package se.sics.mspsim.core;
 
 import java.util.Arrays;
 
+import se.sics.mspsim.core.EmulationLogger.WarningType;
 import se.sics.mspsim.core.Memory.AccessMode;
 import se.sics.mspsim.util.Utils;
 import edu.umass.energy.Capacitor;
@@ -145,7 +146,7 @@ public class Flash extends IOUnit {
 	if (blockwriteCount == 64) {
 	  // FIXME: What happens if we try to write more than 64 bytes
 	  // on real hardware???
-	  logw("Last access in block mode. Forced exit?");
+	  logw(WarningType.EXECUTION, "Last access in block mode. Forced exit?");
 	  currentWriteMode = WriteMode.WRITE_BLOCK_FINISH;
 	}
 /*	if (DEBUG) {
@@ -321,7 +322,7 @@ public class Flash extends IOUnit {
             log("Flash write in block mode started @" + Utils.hex(address, 4));
           }
           if (addressInFlash(cpu.getPC())) {
-            logw("Oops. Block write access only allowed when executing from RAM.");
+            logw(WarningType.EXECUTION, "Oops. Block write access only allowed when executing from RAM.");
           }
         } else {
           wait_time = BLOCKWRITE_TIME;
@@ -433,7 +434,7 @@ public class Flash extends IOUnit {
     if ((value & KEYMASK) == FWKEY)
       return true;
 
-    logw("Bad key accessing flash controller --> reset");
+    logw(WarningType.EXECUTION, "Bad key accessing flash controller --> reset");
     statusreg |= KEYV;
     cpu.flagInterrupt(RESET_VECTOR, this, true);
     return false;
@@ -470,7 +471,7 @@ public class Flash extends IOUnit {
   }
   
   private void triggerAccessViolation(String reason) {
-    logw("Access violation: " + reason + ". PC=$" + Utils.hex(cpu.getPC(), 4));
+    logw(WarningType.EXECUTION, "Access violation: " + reason + ". PC=$" + Utils.hex(cpu.getPC(), 4));
 
     statusreg |= ACCVIFG;
     if (cpu.getSFR().isIEBitsSet(SFR.IE1, ACCVIE)) {
@@ -504,7 +505,7 @@ public class Flash extends IOUnit {
   public void write(int address, int value, boolean word, long cycles) {
     address = address - offset;
     if (!word) {
-      logw("Invalid access type to flash controller");
+      logw(WarningType.EXECUTION, "Invalid access type to flash controller");
       return;
     }
 
