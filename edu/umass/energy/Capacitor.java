@@ -258,7 +258,17 @@ public class Capacitor extends IOUnit {
     /* Sets the power mode (e.g., active, LPM0, ...).  The constants are defined
      * in se.sics.mspsim.core.MSP430Constants.MODE_NAMES. */
     public void setPowerMode (int mode) {
-        System.err.println("Capacitor.setPowerMode " + mode);
+        System.err.print("Capacitor.setPowerMode ");
+        switch (powerMode) {
+            case POWERMODE_ACTIVE: System.out.println("ACTIVE"); break;
+            case POWERMODE_LPM0: System.out.println("LPM0"); break;
+            case POWERMODE_LPM1: System.out.println("LPM1"); break;
+            case POWERMODE_LPM2: System.out.println("LPM2"); break;
+            case POWERMODE_LPM3: System.out.println("LPM3"); break;
+            case POWERMODE_LPM4: System.out.println("LPM4"); break;
+            case POWERMODE_FLWRI: System.out.println("FLWRI"); break;
+            case POWERMODE_ADC: System.out.println("ADC"); break;
+        }
         this.powerMode = mode;
     }
 
