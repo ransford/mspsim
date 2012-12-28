@@ -118,7 +118,7 @@ public class Flash extends IOUnit {
   
   private TimeEvent end_process = new TimeEvent(0) {
     public void execute(long t) {
-      System.err.println("Unblocking CPU...");
+      System.err.println("Unblocking CPU at cycle " + cpu.cycles);
       blocked_cpu = false;
       cpu.getCapacitor().updateVoltage(false);
       cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
@@ -174,8 +174,9 @@ public class Flash extends IOUnit {
     this.main_range = main_range;
     this.info_range = info_range;
     locked = true;
-    
-    clearAll();
+
+    Arrays.fill(memory, main_range.start, main_range.end, 0xff);
+    Arrays.fill(memory, info_range.start, info_range.end, 0xff);
 
     reset(MSP430.RESET_POR);
   }
@@ -204,7 +205,6 @@ public class Flash extends IOUnit {
   }
   
   private void waitFlashProcess(int time) {
-    System.err.println("waitFlashProcess("+time+")");
     int instr_addr = cpu.getPC();
     int freqdiv = getFlashClockDiv();
     int myfreq;
@@ -237,10 +237,7 @@ public class Flash extends IOUnit {
     case MCLK:
       if (DEBUG)
 	log("Using MCLK source with div=" + freqdiv);
-      long ncycles = (long)time * freqdiv;
-      System.err.println("#cycles for flash: " + ncycles);
-      System.err.println("About to schedule flash-unblock event for cycle " + (cpu.cycles+ncycles));
-      cpu.scheduleCycleEvent(end_process, cpu.cycles + ncycles);
+      cpu.scheduleCycleEvent(end_process, cpu.cycles + (long)time * freqdiv);
       cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_FLWRI);
       break;
     }
@@ -249,16 +246,6 @@ public class Flash extends IOUnit {
   public boolean needsTick() {
     return false;
   }
-
-  private void clearAll() {
-    for (int i = main_range.start; i < main_range.end; i++) {
-      memory[i] = 0xff;
-    }
-    for (int i = info_range.start; i < info_range.end; i++) {
-      memory[i] = 0xff;
-    }
-  }
-
   
   public void flashWrite(int address, int data, AccessMode dataMode) {
     int wait_time = -1;
@@ -307,7 +294,12 @@ public class Flash extends IOUnit {
       break;
       
     case ERASE_ALL:
-      clearAll();
+      for (int i = main_range.start; i < main_range.end; i++) {
+	memory[i] = 0xff;
+      }
+      for (int i = info_range.start; i < info_range.end; i++) {
+	memory[i] = 0xff;
+      }
       waitFlashProcess(MASS_ERASE_TIME);
       break;
     case WRITE_SINGLE:
