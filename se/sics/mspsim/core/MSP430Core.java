@@ -663,7 +663,12 @@ public class MSP430Core extends Chip implements MSP430Constants,
    * @param targetCycleCount The cycle count at which to execute <code>event</code> 
    */
   public void scheduleCycleEvent(TimeEvent event, long targetCycleCount) {
-    System.err.println("scheduleCycleEvent(" + event + ", " + targetCycleCount + ")");
+      /*
+    for (StackTraceElement ste: Thread.currentThread().getStackTrace()) {
+      System.out.println("[TRACE] " + ste);
+    }
+    */
+    System.err.println("scheduleCycleEvent(" + event + ", " + targetCycleCount + "); current cycle=" + cycles);
     long prev = cycleEventQueue.nextTime; // previous head of queue
     cycleEventQueue.addEvent(event, targetCycleCount);
     if (prev != targetCycleCount)
@@ -1061,6 +1066,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	  /* Don't execute any instructions; just update the cycle counter */
     if (cpuOff || flash.blocksCPU()) {
       System.err.println("cpuOff || flash.blocksCPU()");
+      if (cpuOff) System.err.println("in fact, cpuOff");
+      if (flash.blocksCPU()) System.err.println("in fact, flash.blocksCPU()");
       //       System.out.println("Jumping: " + (nextIOTickCycles - cycles));
       // nextEventCycles must exist, otherwise CPU can not wake up!?
 
@@ -1071,21 +1078,28 @@ public class MSP430Core extends Chip implements MSP430Constants,
       // -------------------------------------------------------------------
       /* This can flag an interrupt! */
       while (cycles >= nextEventCycles) {
+        System.err.println("cycles=" + cycles);
+        System.err.println("nextEventCycles=" + nextEventCycles);
         executeEvents();
       }
 
-      if (interruptsEnabled && interruptMax > 0) {
-          /* can not allow for jumping to nextEventCycles since that would jump too far */
+      // executeEvents() may have turned the CPU back on or unblocked flash
+      if (cpuOff || flash.blocksCPU()) {
+
+          if (interruptsEnabled && interruptMax > 0) {
+              /* can not allow for jumping to nextEventCycles since that would jump too far */
+              return -1;
+          }
+
+          if (maxCycles >= 0 && maxCycles < nextEventCycles) {
+              // Should it just freeze or take on extra cycle step if cycles > max?
+              cycles = cycles < maxCycles ? maxCycles : cycles;
+          } else {
+              System.err.println("skipping forward to nextEventCycles=" + nextEventCycles);
+              cycles = nextEventCycles;
+          }
           return -1;
       }
-
-      if (maxCycles >= 0 && maxCycles < nextEventCycles) {
-        // Should it just freeze or take on extra cycle step if cycles > max?
-        cycles = cycles < maxCycles ? maxCycles : cycles;
-      } else {
-        cycles = nextEventCycles;
-      }
-      return -1;
     }
 
     int pcBefore = pc;
