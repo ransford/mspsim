@@ -815,6 +815,15 @@ public class DebugCommands implements CommandBundle {
 					}
 				});
 
+        ch.registerCommand("pauseOnDie",
+                new BasicCommand("don't automatically start after death", "") {
+                    public int executeCommand(CommandContext context) {
+                        cpu.pauseOnDie = true;
+                        context.out.println("Will pause on die().");
+                        return 0;
+                    }
+                });
+
         ch.registerCommand("readbundle",
                 new BasicCommand("print a checkpoint bundle starting at addr",
                     "<addr>") {

@@ -151,6 +151,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
   private int totalMementosCycles = 0;
   private int totalWastedCycles = 0;
 
+  public boolean pauseOnDie = false;
   public DeadTimer deadSource;
   private double offset = 0.0;
 
@@ -790,6 +791,9 @@ public class MSP430Core extends Chip implements MSP430Constants,
     	  retryMemory = gn.getLastMemoryCapture().getMemory();
       }
       try { Thread.sleep(1000); } catch (Exception e) {}
+
+      if (pauseOnDie)
+        gn.stop();
 
       long mementosCycles = 0;
       if (profiler != null) {
