@@ -172,6 +172,19 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
             for (i = addr; i < end; i+=2) {
                 logwriter.println(Utils.hex16(memory[i] | (memory[i+1]<<8)));
             }
+            logwriter.println("==========");
+            logwriter.println("Stack: " + stacksize + " bytes");
+            logwriter.println("Globals: " + globalssize + " bytes");
+            logwriter.println("R0(PC): " +
+                    Utils.hex16(memory[regstart] | (memory[regstart+1] << 8)));
+            logwriter.println("R1(SP): " +
+                    Utils.hex16(memory[regstart+2] | (memory[regstart+3] << 8)));
+            logwriter.println("R2(SR): " +
+                    Utils.hex16(memory[regstart+4] | (memory[regstart+5] << 8)));
+            for (int a = regstart + 6; a < stackstart; a += 2) {
+                logwriter.println("R" + (((a - regstart) / 2) + 1) + ": " +
+                        Utils.hex16(memory[a] | (memory[a+1] << 8)));
+            }
             logwriter.close();
         } catch (IOException ioe) {
             System.err.println("Logfile '" + logfile + "' error:" +
