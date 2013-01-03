@@ -310,8 +310,8 @@ public class SimpleProfiler implements Profiler, EventListener {
       for (int i = 0; i < callStack.length; ++i) {
       // for (CallEntry ce: callStack) {
           ce = callStack[i];
+          if (ce == null) break;
           System.out.println("CallEntry: " + ce);
-          if (ce == null) continue;
           ce.calls = 0;
           ce.cycles = 0;
           ce.exclusiveCycles = 0;
