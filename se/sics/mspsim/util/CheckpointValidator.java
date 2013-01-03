@@ -314,15 +314,17 @@ public int findActiveBundlePointer (int[] memory) {
             int endloc = bun + (readWord(memory, bun) & 0xff)
                 + (readWord(memory, bun) >> 8) + 2 + 30;
             int magic = readWord(memory, endloc);
-            if (magic == MAGIC_NUMBER)
+            if (magic == MAGIC_NUMBER) {
                 candidate = bun;
+                System.err.println("Candidate @ " + Utils.hex16(candidate)
+                        + ": " + getBundleString(memory, candidate));
+            }
             bun = endloc + 2;
         } while (bun < SEGMENT_B + SEGMENT_SIZE);
         return candidate;
     }
 
     do {
-        System.err.println("bun: " + Utils.hex16(bun));
         if (readWord(memory, bun) == 0xFFFF)
             return candidate;
 
@@ -331,7 +333,8 @@ public int findActiveBundlePointer (int[] memory) {
         int magic = readWord(memory, endloc);
         if (magic == MAGIC_NUMBER) {
             candidate = bun;
-            System.err.println("Candidate: " + Utils.hex16(candidate));
+            System.err.println("Candidate @ " + Utils.hex16(candidate)
+                    + ": " + getBundleString(memory, candidate));
         }
         bun = endloc + 2;
     } while (bun < SEGMENT_A + SEGMENT_SIZE);
@@ -340,6 +343,20 @@ public int findActiveBundlePointer (int[] memory) {
 
 public long getCyclesAtEndOfLastFullCheckpoint() {
 	return cyclesAtEndOfLastFullCheckpoint;
+}
+
+public String getBundleString(int[] memory, int addr) {
+    StringBuilder sb = new StringBuilder();
+	int globalssize = memory[addr];
+	int stacksize = memory[addr+1];
+    int end = addr
+        + stacksize + globalssize
+        + 30 // registers
+        + 2  // bundle header
+        + 2; // magic number
+    for (int i = addr; i < end; i+=2)
+        sb.append(Utils.hex16(memory[i] | (memory[i+1]<<8)));
+    return sb.toString();
 }
 
 }
