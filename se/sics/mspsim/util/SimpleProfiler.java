@@ -239,17 +239,17 @@ public class SimpleProfiler implements Profiler, EventListener {
         numCalls.count++;
       }
 
+      // XXX hard-coded hackery
+      if ("__mementos_checkpoint".equals(ce.function.getName())) {
+          cpu.inCheckpoint = false;
+      }
+
       PrintStream logger = this.logger;
       if (logger != null) {
         if ((cspEntry.hide <= 1) && (!hideIRQ || servicedInterrupt == -1)) {
           if (servicedInterrupt >= 0) logger.printf("[%2d] ",servicedInterrupt);
           printSpace(logger, (cSP - interruptLevel) * 2);
           logger.println("return from " + ce.function.getInfo() + " elapsed: " + elapsed + " maxStackUsage: " + maxUsage);
-
-          // XXX hard-coded hackery
-          if ("__mementos_checkpoint".equals(ce.function.getName())) {
-              cpu.inCheckpoint = false;
-          }
         }
       }
 
