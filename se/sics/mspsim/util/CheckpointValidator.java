@@ -292,6 +292,18 @@ public static int readWord (int[] memory, int addr) {
 public int findActiveBundlePointer (int[] memory) {
     int bun = SEGMENT_A;
     int candidate = 0xFFFF;
+    boolean segAerase = false;
+
+    /* if both segments are marked for erasure, no checkpoints; bail */
+    if (segmentIsMarkedForErasure(memory, SEGMENT_A)) {
+        System.err.println("Bundle segment A is marked for erasure");
+        segAerase = true;
+    }
+    if (segmentIsMarkedForErasure(memory, SEGMENT_B)) {
+        System.err.println("Bundle segment B is marked for erasure");
+        if (segAerase) return candidate;
+    }
+
     if (segmentIsEmpty(memory, SEGMENT_A) ||
     		segmentIsMarkedForErasure(memory, SEGMENT_A)) {
         bun = SEGMENT_B;
