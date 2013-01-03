@@ -774,31 +774,35 @@ public class MSP430Core extends Chip implements MSP430Constants,
   }
 
   public void die () {
-	  final long tmpCycles = cycles;
+	  final long totalCyclesAtDeath = cycles;
 	  boolean retryLifecycle = false;
 	  final long wasted = getWastedCycles();
       System.err.println("cpu.die() at PC=" + Utils.hex16(getPC()) +
-              ", V=" + capacitor.getVoltage() + ", cycles=" + tmpCycles +
+              ", V=" + capacitor.getVoltage() + ", cycles=" + totalCyclesAtDeath +
               ", wasted=" + wasted);
       GenericNode gn = (GenericNode)registry.getComponent("node");
       try {
     	  gn.reportDeath();
       } catch (ShouldRetryLifecycleException srle) {
+          // oracle mode
     	  System.err.println(srle.getMessage());
     	  retryLifecycle = true;
     	  setOracleThreshold(getOracleThreshold() +
     			  srle.getOracleVoltageAdjustment());
     	  retryMemory = gn.getLastMemoryCapture().getMemory();
       }
-      try { Thread.sleep(1000); } catch (Exception e) {}
 
-      if (pauseOnDie)
-        gn.stop();
+      if (pauseOnDie) {
+          gn.stop();
+      } else {
+          try { Thread.sleep(1000); } catch (Exception e) {}
+      }
 
       long mementosCycles = 0;
       if (profiler != null) {
-  	    profiler.profileReturn(tmpCycles);
+  	    profiler.profileReturn(totalCyclesAtDeath);
   	    mementosCycles = profiler.getMementosCycles();
+        profiler.resetProfile();
       }
 
       if (capacitor.eFairy != null) {
@@ -827,7 +831,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     	  System.err.println("totalMementosCycles = " + totalMementosCycles +
     			  " + " + mementosCycles);
     	  totalWastedCycles += wasted;
-    	  capacitor.incrementNumLifecycles(tmpCycles);
+    	  capacitor.incrementNumLifecycles(totalCyclesAtDeath);
     	  isRetry = false;
       }
   }

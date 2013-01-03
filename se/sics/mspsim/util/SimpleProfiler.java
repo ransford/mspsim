@@ -175,6 +175,8 @@ public class SimpleProfiler implements Profiler, EventListener {
   }
 
   public void profileReturn(long cycles) {
+      System.err.println("profileReturn() called at cycle " + cycles);
+      printStackTrace(System.err);
     if (cSP <= 0) {
       /* the stack pointer might have been messed with? */
       PrintStream logger = this.logger;
@@ -195,6 +197,12 @@ public class SimpleProfiler implements Profiler, EventListener {
       callStack[cSP-1].exclusiveCycles += elapsed;
     }
     int maxUsage = 0;
+
+    if (elapsed < 0) {
+        System.err.println("elapsed < 0!  cycles=" + cycles + "; "
+                + "cspEntry.cycles=" + cspEntry.cycles + "; ");
+        printStackTrace(System.err);
+    }
     
     if (cspEntry.calls >= 0) {
       CallEntry ce = profileData.get(fkn);
@@ -298,6 +306,17 @@ public class SimpleProfiler implements Profiler, EventListener {
   }
 
   public void clearProfile() {
+      CallEntry ce;
+      for (int i = 0; i < callStack.length; ++i) {
+      // for (CallEntry ce: callStack) {
+          ce = callStack[i];
+          System.out.println("CallEntry: " + ce);
+          if (ce == null) continue;
+          ce.calls = 0;
+          ce.cycles = 0;
+          ce.exclusiveCycles = 0;
+      }
+
     if (profileData != null) {
       CallEntry[] entries =
         profileData.values().toArray(new CallEntry[profileData.size()]);
