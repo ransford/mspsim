@@ -819,7 +819,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       } else {
           capacitor.reset();
       }
-      lastCyclesTime = nextEventCycles = cycles = 0;
+      lastCyclesTime = nextEventCycles = cpuCycles = cycles = 0;
       noMoreCheckpointsThisLifecycle = false;
       reset(); // NOTE: doesn't do anything until next start or step
       capacitor.setA(capacitor.getVoltage(), false); //Make sure that A is updated appropriately
