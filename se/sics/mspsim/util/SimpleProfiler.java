@@ -122,6 +122,12 @@ public class SimpleProfiler implements Profiler, EventListener {
       callStack[cSP] = new CallEntry();
     }
 
+    // XXX hard-coded hackery
+    if ("__mementos_checkpoint".equals(entry.getName())) {
+        cpu.inCheckpoint = true;
+        cyclesAtStartOfCheckpoint = cpu.cycles;
+    }
+
     int hide = 0;
     PrintStream logger = this.logger;
     if (logger != null) {
@@ -137,14 +143,9 @@ public class SimpleProfiler implements Profiler, EventListener {
         if (ignoreFunctions.get(entry.getName()) != null) {
           hide = 1;
         }
-
-        // XXX hard-coded hackery
-        if ("__mementos_checkpoint".equals(entry.getName())) {
-            cpu.inCheckpoint = true;
-            cyclesAtStartOfCheckpoint = cpu.cycles;
-        }
       }
     }
+   
 
     CallEntry ce = callStack[cSP++];
     ce.function = entry;
@@ -332,6 +333,7 @@ public class SimpleProfiler implements Profiler, EventListener {
         }
       }
     }
+    return;
   }  
 
   public void printProfile(PrintStream out) {
