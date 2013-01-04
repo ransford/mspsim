@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec ./run.sh -s scripts/simple.sc $*
+exec ./runmoo.sh -s scripts/simple.sc $*

@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec ./run.sh -s scripts/nocap.sc.tmpl $*
+exec ./runmoo.sh -s scripts/nocap.sc.tmpl $*
