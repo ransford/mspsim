@@ -195,7 +195,7 @@ public class SimpleProfiler implements Profiler, EventListener {
     long elapsed = cycles - cspEntry.cycles;
     long exElapsed = cycles - cspEntry.exclusiveCycles;
     if (cSP != 0) {
-      callStack[cSP-1].exclusiveCycles += elapsed;
+      callStack[cSP-1].exclusiveCycles += exElapsed;
     }
     int maxUsage = 0;
 
