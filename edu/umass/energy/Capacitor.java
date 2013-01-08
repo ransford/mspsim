@@ -260,14 +260,14 @@ public class Capacitor extends IOUnit {
     public void setPowerMode (int mode) {
         System.err.print("Capacitor.setPowerMode ");
         switch (powerMode) {
-            case POWERMODE_ACTIVE: System.out.println("ACTIVE"); break;
-            case POWERMODE_LPM0: System.out.println("LPM0"); break;
-            case POWERMODE_LPM1: System.out.println("LPM1"); break;
-            case POWERMODE_LPM2: System.out.println("LPM2"); break;
-            case POWERMODE_LPM3: System.out.println("LPM3"); break;
-            case POWERMODE_LPM4: System.out.println("LPM4"); break;
-            case POWERMODE_FLWRI: System.out.println("FLWRI"); break;
-            case POWERMODE_ADC: System.out.println("ADC"); break;
+            case POWERMODE_ACTIVE: System.err.println("ACTIVE"); break;
+            case POWERMODE_LPM0: System.err.println("LPM0"); break;
+            case POWERMODE_LPM1: System.err.println("LPM1"); break;
+            case POWERMODE_LPM2: System.err.println("LPM2"); break;
+            case POWERMODE_LPM3: System.err.println("LPM3"); break;
+            case POWERMODE_LPM4: System.err.println("LPM4"); break;
+            case POWERMODE_FLWRI: System.err.println("FLWRI"); break;
+            case POWERMODE_ADC: System.err.println("ADC"); break;
         }
         this.powerMode = mode;
     }
