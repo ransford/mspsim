@@ -153,7 +153,8 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
 	//TODO: compare stored checkpoint with previous registers and memory.
 	int globalssize = memory[addr];
 	int stacksize = memory[addr+1];
-    int regstart = addr+2;
+        int generation = memory[addr+2] | (memory[addr+3] << 8);
+    int regstart = addr + 2 + 2;
     int stackstart = regstart + 30; //15 registers * 2 bytes
     int globalstart = stackstart + stacksize;
     int magicnum = globalstart + globalssize;
@@ -168,6 +169,7 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
                 + stacksize + globalssize
                 + 30 // registers
                 + 2  // bundle header
+                + 2  // generation number
                 + 2; // magic number
             for (i = addr; i < end; i+=2) {
                 logwriter.println(Utils.hex16(memory[i] | (memory[i+1]<<8)));
@@ -199,6 +201,21 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
         result = false;
     }
 
+    System.err.print("preregs: ");
+    for (i = 0; i < 16; i++) {
+        if (i == 3) continue;
+        System.err.print("R" + i + ": " + Utils.hex16(preregs[i]) + "; ");
+    }
+    System.err.println();
+    System.err.print("regs: ");
+    for (int j = i = 0; i < 16; i++) {
+        if (i == 3) continue;
+        j = (i > 3) ? i-1 : i;
+        int radr = regstart + (j*2);
+        System.err.print("R" + i + ": " + Utils.hex16(memory[radr] | (memory[radr+1] << 8)) + "; ");
+    }
+    System.err.println();
+
 	//compare registers
     int j;
 	for (i=0; i < 16; i++)
@@ -210,26 +227,25 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
         int radr = regstart + (j * 2);
         int rval = memory[radr] | (memory[radr+1] << 8);
 
-		if (rval !=  preregs[i])
-		{
-			if (i == 0) {
-				if (isOracleCall && (rval != preregs[i]+2)) {
-					result = false;
-				}
-			} else if (i == 1) {
-				if (isOracleCall && (rval != preregs[i]-2)) {
-					result = false;
-				}
-			} else if (i == 2) {
+        if (rval != preregs[i]) {
+            if (i == 0) {
+                if (isOracleCall && (rval != preregs[i] + 2)) {
+                    result = false;
+                }
+            } else if (i == 1) {
+                if (isOracleCall && (rval != preregs[i] - 2)) {
+                    result = false;
+                }
+            } else if (i == 2) {
                 System.err.println("Register R2 mismatch, but that's OK");
             } else {
-                System.err.println("Register R"+i+" does not match checkpt (0x"
+                System.err.println("Register R" + i + " does not match checkpt (0x"
                         + Utils.hex16(preregs[i])
                         + " != 0x" + Utils.hex16(rval) + ")");
                 result = false;
             }
-		}
-	}
+        }
+    }
 
 	//compare stack
 	for (i=0; i < stacksize; i+=2)
@@ -312,7 +328,7 @@ public int findActiveBundlePointer (int[] memory) {
                 return candidate;
 
             int endloc = bun + (readWord(memory, bun) & 0xff)
-                + (readWord(memory, bun) >> 8) + 2 + 30;
+                + (readWord(memory, bun) >> 8) + 2 + 2 + 30;
             int magic = readWord(memory, endloc);
             if (magic == MAGIC_NUMBER) {
                 candidate = bun;
@@ -329,7 +345,7 @@ public int findActiveBundlePointer (int[] memory) {
             return candidate;
 
         int endloc = bun + (readWord(memory, bun) & 0xff)
-            + (readWord(memory, bun) >> 8) + 2 + 30;
+            + (readWord(memory, bun) >> 8) + 2 + 2 + 30;
         int magic = readWord(memory, endloc);
         if (magic == MAGIC_NUMBER) {
             candidate = bun;
@@ -353,6 +369,7 @@ public String getBundleString(int[] memory, int addr) {
         + stacksize + globalssize
         + 30 // registers
         + 2  // bundle header
+        + 2  // generation number
         + 2; // magic number
     for (int i = addr; i < end; i+=2)
         sb.append(Utils.hex16(memory[i] | (memory[i+1]<<8)));
