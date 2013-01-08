@@ -176,8 +176,6 @@ public class SimpleProfiler implements Profiler, EventListener {
   }
 
   public void profileReturn(long cycles) {
-      System.err.println("profileReturn() called at cycle " + cycles);
-      printStackTrace(System.err);
     if (cSP <= 0) {
       /* the stack pointer might have been messed with? */
       PrintStream logger = this.logger;
@@ -312,7 +310,6 @@ public class SimpleProfiler implements Profiler, EventListener {
       // for (CallEntry ce: callStack) {
           ce = callStack[i];
           if (ce == null) break;
-          System.out.println("CallEntry: " + ce);
           ce.calls = 0;
           ce.cycles = 0;
           ce.exclusiveCycles = 0;
