@@ -695,7 +695,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       /* Warn if someone schedules a time backwards in time... */
       if (cycles > nextVTimeEventCycles) {
         logger.logw(this, WarningType.EMULATION_ERROR, "Scheduling time event backwards in time!!!");
-        throw new IllegalStateException("Cycles (" + cycles + ") are passed desired future time (" + nextVTimeEventCycles+ ")");
+        // throw new IllegalStateException("Cycles (" + cycles + ") are passed desired future time (" + nextVTimeEventCycles+ ")");
       }
     }
   }
