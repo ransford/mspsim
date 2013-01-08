@@ -435,6 +435,7 @@ public class Flash extends IOUnit {
   private void triggerEmergencyExit() {
     mode = 0;
     cpu.isFlashBusy = false;
+    blocked_cpu = false;
     wait = true;
     locked = true;
     currentWriteMode = WriteMode.NONE;   
@@ -593,6 +594,7 @@ public class Flash extends IOUnit {
     mode = 0;
     clockcfg = 0x42;
     cpu.isFlashBusy = false;
+    blocked_cpu = false;
     wait = true;
     locked = true;
     currentWriteMode = WriteMode.NONE;
