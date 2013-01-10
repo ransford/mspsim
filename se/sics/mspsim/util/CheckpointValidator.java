@@ -154,7 +154,7 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
 	int globalssize = memory[addr];
 	int stacksize = memory[addr+1];
         int generation = memory[addr+2] | (memory[addr+3] << 8);
-    int regstart = addr + 2 + 2;
+    int regstart = addr + 2 + 2 + 2;
     int stackstart = regstart + 30; //15 registers * 2 bytes
     int globalstart = stackstart + stacksize;
     int magicnum = globalstart + globalssize;
@@ -170,11 +170,17 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
                 + 30 // registers
                 + 2  // bundle header
                 + 2  // generation number
+                + 2  // V_thresh
                 + 2; // magic number
             for (i = addr; i < end; i+=2) {
                 logwriter.println(Utils.hex16(memory[i] | (memory[i+1]<<8)));
             }
             logwriter.println("==========");
+            logwriter.println("Generation: " +
+                    Utils.hex16(memory[addr+2] | (memory[addr+3] << 8)));
+            logwriter.println("V_thresh: " +
+                    Utils.hex16(memory[addr+4] | (memory[addr+5] << 8)) +
+                    "(" + (memory[addr+4] | (memory[addr+5] << 8)) + ")");
             logwriter.println("Stack: " + stacksize + " bytes");
             logwriter.println("Globals: " + globalssize + " bytes");
             logwriter.println("R0(PC): " +
@@ -328,7 +334,7 @@ public int findActiveBundlePointer (int[] memory) {
                 return candidate;
 
             int endloc = bun + (readWord(memory, bun) & 0xff)
-                + (readWord(memory, bun) >> 8) + 2 + 2 + 30;
+                + (readWord(memory, bun) >> 8) + 2 + 2 + 2 + 30;
             int magic = readWord(memory, endloc);
             if (magic == MAGIC_NUMBER) {
                 candidate = bun;
@@ -370,6 +376,7 @@ public String getBundleString(int[] memory, int addr) {
         + 30 // registers
         + 2  // bundle header
         + 2  // generation number
+        + 2  // V_thresh
         + 2; // magic number
     for (int i = addr; i < end; i+=2)
         sb.append(Utils.hex16(memory[i] | (memory[i+1]<<8)));
