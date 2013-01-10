@@ -6,5 +6,5 @@
 #nocap
 resurrectionThreshold 3.5
 logcalls
-checkpt 0xfa00 0xfc00 __mementos_checkpoint checkpoints/logfile
+checkpt 0xf900 0xfb00 __mementos_checkpoint checkpoints/logfile
 #break 0xe7bc
