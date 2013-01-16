@@ -351,7 +351,7 @@ public int findActiveBundlePointer (int[] memory) {
             return candidate;
 
         int endloc = bun + (readWord(memory, bun) & 0xff)
-            + (readWord(memory, bun) >> 8) + 2 + 2 + 30;
+            + (readWord(memory, bun) >> 8) + 2 + 2 + 2 + 30;
         int magic = readWord(memory, endloc);
         if (magic == MAGIC_NUMBER) {
             candidate = bun;
