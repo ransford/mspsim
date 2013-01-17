@@ -2091,8 +2091,13 @@ public class MSP430Core extends Chip implements MSP430Constants,
               updateStatus = false;
 
               if (instruction == RETURN) {
-                  if (profiler != null)
-                      profiler.profileReturn(cpuCycles);
+                  if (profiler != null) {
+                      try {
+                          profiler.profileReturn(cpuCycles);
+                      } catch (StopExecutionException see) {
+                          stopExecution(see.getMessage());
+                      }
+                  }
 
                   /* If SP is at top of stack, we're almost certainly returning
                    * from main(); clang in particular likes to put 'ret' at the
