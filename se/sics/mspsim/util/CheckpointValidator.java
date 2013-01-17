@@ -207,21 +207,6 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
         result = false;
     }
 
-    System.err.print("preregs: ");
-    for (i = 0; i < 16; i++) {
-        if (i == 3) continue;
-        System.err.print("R" + i + ": " + Utils.hex16(preregs[i]) + "; ");
-    }
-    System.err.println();
-    System.err.print("regs: ");
-    for (int j = i = 0; i < 16; i++) {
-        if (i == 3) continue;
-        j = (i > 3) ? i-1 : i;
-        int radr = regstart + (j*2);
-        System.err.print("R" + i + ": " + Utils.hex16(memory[radr] | (memory[radr+1] << 8)) + "; ");
-    }
-    System.err.println();
-
 	//compare registers
     int j;
 	for (i=0; i < 16; i++)
