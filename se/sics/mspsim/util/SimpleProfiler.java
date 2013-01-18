@@ -415,7 +415,8 @@ public class SimpleProfiler implements Profiler, EventListener {
 		  fname = entries[i].function.getName();
 		  if (fname.equals("_old_main"))
 			  foundOldMain = true;
-		  else if (fname.startsWith("__mementos"))
+		  else if (fname.startsWith("__mementos") &&
+                  !fname.equals("__mementos_restore"))
 			  total += entries[i].exclusiveCycles;
 	  }
 	  
