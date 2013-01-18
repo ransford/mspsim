@@ -176,6 +176,9 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
                 logwriter.println(Utils.hex16(memory[i] | (memory[i+1]<<8)));
             }
             logwriter.println("==========");
+            Capacitor cap = node.getCPU().getCapacitor();
+            logwriter.format("%1.3f,%1.3f\n", cap.getTimestamp(),
+                    cap.getVoltage());
             logwriter.println("Generation: " +
                     Utils.hex16(memory[addr+2] | (memory[addr+3] << 8)));
             logwriter.println("V_thresh: " +

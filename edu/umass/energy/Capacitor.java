@@ -337,6 +337,10 @@ public class Capacitor extends IOUnit {
         return shouldDie;
     }
 
+    public double getTimestamp () {
+        return clockSource.getTimeMillis() + cpu.getOffset();
+    }
+
     public void setClockSource (CapClockSource c) {
         this.clockSource = c;
     }
