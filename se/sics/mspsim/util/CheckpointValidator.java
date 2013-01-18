@@ -28,8 +28,8 @@ public class CheckpointValidator
     protected static int bundleCounter = 0;
     protected final int MAGIC_NUMBER = 0xBEAD;
     
-    public static final int SEGMENT_A = 0xFA00;
-    public static final int SEGMENT_B = 0xFC00;
+    public static final int SEGMENT_A = 0xF900;
+    public static final int SEGMENT_B = 0xFB00;
     public static final int SEGMENT_SIZE = 512;
 
     private long cyclesAtEntry = 0;
