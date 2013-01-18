@@ -56,6 +56,7 @@ import se.sics.mspsim.core.EventListener;
 import se.sics.mspsim.core.EventSource;
 import se.sics.mspsim.core.MSP430Core;
 import se.sics.mspsim.core.Profiler;
+import se.sics.mspsim.core.StopExecutionException;
 import se.sics.mspsim.profiler.CallListener;
 
 public class SimpleProfiler implements Profiler, EventListener {
@@ -139,7 +140,7 @@ public class SimpleProfiler implements Profiler, EventListener {
         if (servicedInterrupt >= 0) logger.printf("[%2d] ", servicedInterrupt);
         printSpace(logger, (cSP - interruptLevel) * 2);
         logger.println("Call to $" + Utils.hex(entry.getAddress(), 4) +
-                       ": " + entry.getInfo());
+                       ": " + entry.getInfo() + " R15: " + Utils.hex16(cpu.readRegister(15)));
         if (ignoreFunctions.get(entry.getName()) != null) {
           hide = 1;
         }
@@ -176,6 +177,7 @@ public class SimpleProfiler implements Profiler, EventListener {
   }
 
   public void profileReturn(long cycles) {
+    boolean shouldStopExecution = false;
     if (cSP <= 0) {
       /* the stack pointer might have been messed with? */
       PrintStream logger = this.logger;
@@ -241,6 +243,8 @@ public class SimpleProfiler implements Profiler, EventListener {
       // XXX hard-coded hackery
       if ("__mementos_checkpoint".equals(ce.function.getName())) {
           cpu.inCheckpoint = false;
+      } else if ("__mementos_restore".equals(ce.function.getName())) {
+          shouldStopExecution = true;
       }
 
       PrintStream logger = this.logger;
@@ -248,7 +252,7 @@ public class SimpleProfiler implements Profiler, EventListener {
         if ((cspEntry.hide <= 1) && (!hideIRQ || servicedInterrupt == -1)) {
           if (servicedInterrupt >= 0) logger.printf("[%2d] ",servicedInterrupt);
           printSpace(logger, (cSP - interruptLevel) * 2);
-          logger.println("return from " + ce.function.getInfo() + " elapsed: " + elapsed + " maxStackUsage: " + maxUsage);
+          logger.println("return from " + ce.function.getInfo() + " elapsed: " + elapsed + " maxStackUsage: " + maxUsage + " R15: " + Utils.hex16(cpu.readRegister(15)));
         }
       }
 
@@ -260,6 +264,9 @@ public class SimpleProfiler implements Profiler, EventListener {
       }
     }
     newIRQ = false;
+    if (shouldStopExecution) {
+        throw new StopExecutionException(cpu.readRegister(15), "return from __mementos_restore");
+    }
   }
 
   public void profileInterrupt(int vector, long cycles) {

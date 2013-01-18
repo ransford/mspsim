@@ -320,7 +320,7 @@ public class Capacitor extends IOUnit {
 
         if (dead) {
             if (printCounter++ % 10 == 0)
-                System.err.println("<dead>" + (currentTime) + "," + getVoltage());
+                System.err.format("<dead>%1.3f,%1.3f%n", currentTime, getVoltage());
             return false;
         }
 
@@ -330,9 +330,9 @@ public class Capacitor extends IOUnit {
         }
 
         if (!suppressVoltagePrinting && (printCounter++ % 10 == 0))
-            System.err.println((inCheckpoint ? "<chk>" : "") +
-                    (clockSource.getTimeMillis() + cpu.getOffset()) +
-                    "," + voltage);
+            System.err.format("%s%1.3f,%1.3f%n", (inCheckpoint ? "<chk>" : ""),
+                    (clockSource.getTimeMillis() + cpu.getOffset()),
+                    voltage);
 
         return shouldDie;
     }
