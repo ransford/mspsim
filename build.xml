@@ -14,10 +14,6 @@
     <fileset dir="${lib}" includes="**/*.jar"/>
   </path>
 
-  <manifestclasspath property="jar.classpath" jarfile="${jarfile}">
-    <classpath refid="classpath" />
-  </manifestclasspath>
-
   <target name="init">
     <tstamp/>
     <mkdir dir="${build}"/>
