@@ -1,3 +1,5 @@
 #!/bin/sh
 
-exec ./runmoo.sh -s scripts/simple.sc $*
+WHEREAMI=$(dirname "$0")
+
+exec "$WHEREAMI"/runmoo.sh -s "$WHEREAMI"/scripts/simple.sc "$@"

@@ -1,3 +1,5 @@
 #!/bin/sh
 
-exec ./runmoo.sh -s scripts/nocap.sc.tmpl $*
+WHEREAMI=$(dirname "$0")
+
+exec "$WHEREAMI"/runmoo.sh -s "$WHEREAMI"/scripts/nocap.sc.tmpl "$@"

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+WHEREAMI=$(dirname "$0")
+
 while getopts "hs:t:" opt; do
 	case $opt in
 		s) EXTRAFLAGS="$EXTRAFLAGS -autorun=$OPTARG" ;;
@@ -17,7 +19,7 @@ test -n "$FIRMWARE" || exit 1
 EXTRAFLAGS="$EXTRAFLAGS $*"
 
 java ${DEBUGOPTS} \
-	-classpath "dist/mspsim.jar:lib/jcommon-1.0.14.jar:lib/jfreechart-1.0.11.jar:lib/jipv6.jar" \
+	-classpath "${WHEREAMI}/dist/mspsim.jar:${WHEREAMI}/lib/jcommon-1.0.14.jar:${WHEREAMI}/lib/jfreechart-1.0.11.jar:${WHEREAMI}/lib/jipv6.jar" \
 	se.sics.mspsim.platform.crfid.MooNode \
 	-nogui \
 	-exitwhendone \

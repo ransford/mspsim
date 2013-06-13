@@ -1,3 +1,5 @@
 #!/bin/sh
 
-exec ./runmoo.sh -s scripts/oracle.sc.tmpl $*
+WHEREAMI=$(dirname "$0")
+
+exec "$WHEREAMI"/runmoo.sh -s "$WHEREAMI"/scripts/oracle.sc.tmpl "$@"

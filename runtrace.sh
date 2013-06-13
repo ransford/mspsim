@@ -1,3 +1,5 @@
 #!/bin/sh
 
-exec ./runmoo.sh -t "$TRACE" -s scripts/moo.sc $*
+WHEREAMI=$(dirname "$0")
+
+exec "$WHEREAMI"/runmoo.sh -s "$WHEREAMI"/scripts/moo.sc "$@"
