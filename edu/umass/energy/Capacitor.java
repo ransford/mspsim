@@ -57,37 +57,37 @@ public class Capacitor extends IOUnit {
     // private double defaultResistance = MSP430_RESISTANCE_ACTIVE;
     private double eFairyPrevVoltage = 0.0;
 
-    public double resistanceADCRead (double voltage) {
+    public static double resistanceADCRead (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9824
         return (3346.2 * voltage) + 1040.8;
     }
 
-    double resistanceActive (double voltage) {
+    public static double resistanceActive (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9958
         return (4010.6 * voltage) + 803.53;
     }
 
-    public double resistanceFlashWrite (double voltage) {
+    public static double resistanceFlashWrite (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9998
         return (4747.8 * voltage) + 152.98;
     }
 
-    double resistanceLPM0 (double voltage) {
+    public static double resistanceLPM0 (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9999
         return (18232 * voltage) + 1017.9;
     }
 
-    double resistanceLPM1 (double voltage) {
+    public static double resistanceLPM1 (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9999
         return (18230 * voltage) + 1014.3;
     }
 
-    double resistanceLPM2 (double voltage) {
+    public static double resistanceLPM2 (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.999
         return (48202 * voltage) + 6229.5;
     }
 
-    double resistanceLPM3 (double voltage) {
+    public static double resistanceLPM3 (double voltage) {
         // Cubic regression calculated from spreadsheet; R^2 = 0.994
         return
             (-66859 * Math.pow(voltage, 3))
@@ -96,7 +96,7 @@ public class Capacitor extends IOUnit {
             + 1e6;
     }
 
-    double resistanceLPM4 (double voltage) {
+    public static double resistanceLPM4 (double voltage) {
         // Cubic regression calculated from spreadsheet; R^2 = 0.9944
         return
             (-128337 * Math.pow(voltage, 3))
@@ -238,21 +238,25 @@ public class Capacitor extends IOUnit {
             lastATime += cpu.getOffset();
     }
 
+    public static double getResistance (int powmode, double V) {
+        switch (powmode) {
+            case POWERMODE_ACTIVE: return Capacitor.resistanceActive(V);
+            case POWERMODE_LPM0:   return Capacitor.resistanceLPM0(V);
+            case POWERMODE_LPM1:   return Capacitor.resistanceLPM1(V);
+            case POWERMODE_LPM2:   return Capacitor.resistanceLPM2(V);
+            case POWERMODE_LPM3:   return Capacitor.resistanceLPM3(V);
+            case POWERMODE_LPM4:   return Capacitor.resistanceLPM4(V);
+            case POWERMODE_FLWRI:  return Capacitor.resistanceFlashWrite(V);
+            case POWERMODE_ADC:    return Capacitor.resistanceADCRead(V);
+        }
+        throw new RuntimeException("Unknown power mode " + powmode);
+    }
+
     /**
      * Returns the load resistance to be used in voltage calculations.
      */
     public double getResistance () {
-        switch (powerMode) {
-            case POWERMODE_ACTIVE: return resistanceActive(voltage);
-            case POWERMODE_LPM0:   return resistanceLPM0(voltage);
-            case POWERMODE_LPM1:   return resistanceLPM1(voltage);
-            case POWERMODE_LPM2:   return resistanceLPM2(voltage);
-            case POWERMODE_LPM3:   return resistanceLPM3(voltage);
-            case POWERMODE_LPM4:   return resistanceLPM4(voltage);
-            case POWERMODE_FLWRI:  return resistanceFlashWrite(voltage);
-            case POWERMODE_ADC:    return resistanceADCRead(voltage);
-        }
-        throw new RuntimeException("Unknown power mode " + powerMode);
+        return Capacitor.getResistance(this.powerMode, this.voltage);
     }
 
     /* Sets the power mode (e.g., active, LPM0, ...).  The constants are defined
