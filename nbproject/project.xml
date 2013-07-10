@@ -16,15 +16,10 @@
                     <encoding>MacRoman</encoding>
                 </source-folder>
                 <source-folder>
-                    <label>edu</label>
+                    <label>Source Packages</label>
                     <type>java</type>
-                    <location>edu</location>
-                    <encoding>MacRoman</encoding>
-                </source-folder>
-                <source-folder>
-                    <label>se</label>
-                    <type>java</type>
-                    <location>se</location>
+                    <location>.</location>
+                    <includes>se/,edu/</includes>
                     <encoding>MacRoman</encoding>
                 </source-folder>
             </folders>
@@ -49,12 +44,9 @@
             <view>
                 <items>
                     <source-folder style="packages">
-                        <label>edu</label>
-                        <location>edu</location>
-                    </source-folder>
-                    <source-folder style="packages">
-                        <label>se</label>
-                        <location>se</location>
+                        <label>Source Packages</label>
+                        <location>.</location>
+                        <includes>se/,edu/</includes>
                     </source-folder>
                     <source-file>
                         <location>build.xml</location>
@@ -72,9 +64,7 @@
         </general-data>
         <java-data xmlns="http://www.netbeans.org/ns/freeform-project-java/3">
             <compilation-unit>
-                <package-root>edu</package-root>
-                <package-root>se</package-root>
-                <classpath mode="compile">lib:lib/jcommon-1.0.14.jar:lib/jfreechart-1.0.11.jar:lib/jipv6.jar:lib/json-simple-1.1.1.jar</classpath>
+                <package-root>.</package-root>
                 <source-level>1.6</source-level>
             </compilation-unit>
         </java-data>
