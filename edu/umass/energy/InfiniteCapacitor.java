@@ -55,7 +55,7 @@ public class InfiniteCapacitor extends PowerSupply {
         return;
     }
     
-    public double convalesce () {
+    public double recover () {
         return 0;
     }
 }

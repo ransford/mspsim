@@ -806,7 +806,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
       }
 
       if (powerSupply.traceDriven) {
-          powerSupply.convalesce();
+          powerSupply.recover();
       } else {
           powerSupply.reset();
       }

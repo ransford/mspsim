@@ -84,9 +84,9 @@ public abstract class PowerSupply extends IOUnit {
      * Do something to recover from a power failure, such as recharging to a
      * healthier voltage in the case of a rechargeable supply.  Probably a no-op
      * for a non-rechargeable supply.
-     * @return the amount of time it took to convalesce
+     * @return the amount of time it took to recover
      */
-    public abstract double convalesce();
+    public abstract double recover();
     
     public void incrementNumLifecycles() {
         numLifecycles++;

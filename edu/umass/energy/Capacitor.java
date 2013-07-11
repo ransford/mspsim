@@ -134,7 +134,7 @@ public class Capacitor extends PowerSupply {
                 "; startTime=" + startTime);
     }
     
-    public double convalesce() {
+    public double recover() {
         DeadTimer deadt = cpu.getDeadTimer();
         int oldPowerMode = this.powerMode;
         
