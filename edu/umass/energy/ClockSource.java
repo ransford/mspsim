@@ -1,6 +1,6 @@
 package edu.umass.energy;
 
-public interface CapClockSource {
+public interface ClockSource {
 
 	public double getTimeMillis();
 

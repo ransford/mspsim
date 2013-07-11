@@ -49,7 +49,7 @@ import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.Utils;
 
 import java.lang.Math;
-import edu.umass.energy.CapClockSource;
+import edu.umass.energy.ClockSource;
 import edu.umass.energy.DeadTimer;
 import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.platform.ShouldRetryLifecycleException;
@@ -60,7 +60,7 @@ import se.sics.mspsim.util.SimpleProfiler;
  * The CPU of the MSP430
  */
 public class MSP430Core extends Chip implements MSP430Constants,
-       CapClockSource {
+       ClockSource {
 
   public static final int RETURN = 0x4130;
 

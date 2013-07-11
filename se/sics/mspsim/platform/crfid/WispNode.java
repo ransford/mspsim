@@ -51,13 +51,18 @@ import se.sics.mspsim.core.IOUnit;
 import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.util.ArgumentManager;
 import java.lang.Math;
+import edu.umass.energy.Capacitor;
 
 public class WispNode extends GenericNode implements ADCInput {
   public static final boolean DEBUG = false;
   public static final int MODE_MAX = 0; // ?
 
   public WispNode () {
-      super("WISP", new MSP430f2132Config());
+      super("WISP", new MSP430f2132Config(),
+              new Capacitor(10e-6 /* 10 uF */,
+                  4.5 /* 4.5 V */,
+                  3.0 /* voltage divider factor */,
+                  2.5 /* voltage check ref voltage */));
   }
 
   public boolean getDebug () {

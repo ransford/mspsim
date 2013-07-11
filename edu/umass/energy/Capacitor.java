@@ -43,7 +43,6 @@ public class Capacitor extends PowerSupply {
      public static final double MSP430_RESISTANCE_LPM4 = 1801200; // E30
      */
 
-    private CapClockSource clockSource;
     // private double defaultResistance = MSP430_RESISTANCE_ACTIVE;
     private double eFairyPrevVoltage = 0.0;
 
@@ -100,16 +99,14 @@ public class Capacitor extends PowerSupply {
       * @param C Capacitance in farads, e.g. 10e-6 == 10uF.
       * @param initialVoltage Initial voltage in volts, e.g. 4.5 == 4.5V.
       */
-    public Capacitor (MSP430 msp, double C, double initVoltage,
+    public Capacitor (double C, double initVoltage,
             double inputVoltageDividerFactor,
             double inputVoltageReferenceVoltage) {
-        super("capacitor", msp);
-        cpu = msp;
+        super("capacitor");
         capacitance = C;
-        this.effectiveMaxVoltage =
+        effectiveMaxVoltage =
             (inputVoltageDividerFactor * inputVoltageReferenceVoltage);
-        this.setPowerMode(POWERMODE_ACTIVE);
-        setClockSource(msp);
+        setPowerMode(POWERMODE_ACTIVE);
         setInitialVoltage(initVoltage);
     }
 
@@ -322,10 +319,6 @@ public class Capacitor extends PowerSupply {
         if (voltage <= cpu.deathThreshold)
             throw new StopExecutionException(cpu.readRegister(15),
                     "Voltage is too low");
-    }
-
-    public void setClockSource (CapClockSource c) {
-        this.clockSource = c;
     }
 
     /**

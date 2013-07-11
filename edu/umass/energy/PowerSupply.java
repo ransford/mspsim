@@ -15,10 +15,13 @@ import se.sics.mspsim.core.StopExecutionException;
 /**
  * Abstraction of a power supply.
  */
-public abstract class PowerSupply extends IOUnit {
+public abstract class PowerSupply {
     protected double voltage;
     public boolean traceDriven = false;
     private long numLifecycles = 1;
+    private PowerSupplyIO psio;
+    private String id;
+    private MSP430 cpu;
 
     protected int powerMode;
     public static final int POWERMODE_ACTIVE = 0;
@@ -33,6 +36,8 @@ public abstract class PowerSupply extends IOUnit {
     // Read this (otherwise unused) memory address to get this PowerSupply's
     // current voltage.
     public static final int getVoltageAddress = 0x01C0;
+    
+    private ClockSource clockSource;
 
     /* Sets the power mode (e.g., active, LPM0, ...).  The constants are defined
      * in se.sics.mspsim.core.MSP430Constants.MODE_NAMES. */
@@ -66,15 +71,17 @@ public abstract class PowerSupply extends IOUnit {
         }
         this.powerMode = mode;
     }
-
-    public PowerSupply(String id, MSP430 msp) {
-        super(id, msp, msp.memory, getVoltageAddress);
+    
+    public PowerSupply (String id) {
+        this.id = id;
     }
 
-    public abstract int read(int address, boolean word, long cycles);
-
-    public abstract void write(int address, int value, boolean word,
-            long cycles);
+    public void setCpu (MSP430 msp) {
+        cpu = msp;
+        setClockSource(cpu);
+        psio = new PowerSupplyIO(this.id, cpu);
+        cpu.setIORange(PowerSupply.getVoltageAddress, 2, psio);
+    }
 
     public abstract void reset();
     
@@ -102,4 +109,9 @@ public abstract class PowerSupply extends IOUnit {
      * failure.
      */
     public abstract void updateVoltage() throws StopExecutionException;
+    
+    
+    public void setClockSource (ClockSource c) {
+        this.clockSource = c;
+    }
 }

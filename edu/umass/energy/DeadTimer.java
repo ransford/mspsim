@@ -1,6 +1,6 @@
 package edu.umass.energy;
 
-public class DeadTimer implements CapClockSource {
+public class DeadTimer implements ClockSource {
 
     double currentTime = 0;
 
