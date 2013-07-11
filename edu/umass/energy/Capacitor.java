@@ -2,10 +2,11 @@ package edu.umass.energy;
 import java.lang.Math;
 import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.core.IOUnit;
+import se.sics.mspsim.core.MSP430Constants;
+import se.sics.mspsim.core.StopExecutionException;
 
-public class Capacitor extends IOUnit {
+public class Capacitor extends PowerSupply {
     private double capacitance;
-    private double voltage;
     private double effectiveMaxVoltage;
     private double inputVoltageDividerFactor;
     private double inputVoltageReferenceVoltage;
@@ -18,23 +19,12 @@ public class Capacitor extends IOUnit {
     private long numSetVoltages = 0;
     private long numUpdateVoltages = 0;
     public long accumCycleCount = 0;
-    private long numLifecycles = 1;
     private long printCounter = 0;
-    private int powerMode;
     private boolean suppressVoltagePrinting = false;
     private boolean suppressEnergyPrinting = false;
     public EnergyFairy eFairy;
 
     private boolean enabled = true;
-
-    public static final int POWERMODE_ACTIVE = 0;
-    public static final int POWERMODE_LPM0 = 1;
-    public static final int POWERMODE_LPM1 = 2;
-    public static final int POWERMODE_LPM2 = 3;
-    public static final int POWERMODE_LPM3 = 4;
-    public static final int POWERMODE_LPM4 = 5;
-    public static final int POWERMODE_FLWRI = 100;
-    public static final int POWERMODE_ADC = 101;
     
     public static final int ADC_CYCLES = 647;
 
@@ -105,10 +95,6 @@ public class Capacitor extends IOUnit {
             + 3e6;
     }
 
-    /* unused on MSP430F2132, believed unused on MSP430F1611; should be safe to
-       inhabit this address. */
-    public static final int voltageReaderAddress = 0x01C0;
-
     /**
       * @param msp The MSP430 whose livelihood depends on this Capacitor
       * @param C Capacitance in farads, e.g. 10e-6 == 10uF.
@@ -117,7 +103,7 @@ public class Capacitor extends IOUnit {
     public Capacitor (MSP430 msp, double C, double initVoltage,
             double inputVoltageDividerFactor,
             double inputVoltageReferenceVoltage) {
-        super("capacitor", msp, msp.memory, voltageReaderAddress);
+        super("capacitor", msp);
         cpu = msp;
         capacitance = C;
         this.effectiveMaxVoltage =
@@ -129,6 +115,7 @@ public class Capacitor extends IOUnit {
 
     public void setEnergyFairy (EnergyFairy ef) {
         this.eFairy = ef;
+        this.traceDriven = (ef != null);
     }
 
     public void setInitialVoltage (double initVoltage) {
@@ -146,6 +133,26 @@ public class Capacitor extends IOUnit {
         System.err.println("Capacitor.reset(): voltage=" + voltage +
                 "; startTime=" + startTime);
     }
+    
+    public double convalesce() {
+        DeadTimer deadt = cpu.getDeadTimer();
+        int oldPowerMode = this.powerMode;
+        
+        deadt.setCurrentTime(cpu.getTimeMillis() + offset);
+        this.setClockSource(deadt);
+        setPowerMode(MSP430Constants.MODE_LPM4);
+
+        // consume a voltage trace until we can resurrect the CPU
+        while (voltage < cpu.resurrectionThreshold) {
+            updateVoltage();
+        }
+        setA(voltage, false);
+
+        setPowerMode(oldPowerMode);
+        setClockSource(cpu);
+        double totalTimeToConvalesce = deadt.getTimeMillis();
+        return totalTimeToConvalesce;
+    }
 
     public double getElapsedTimeMillis () {
         return cpu.getTimeMillis() - startTime;
@@ -162,16 +169,11 @@ public class Capacitor extends IOUnit {
      * @param amount Positive amount of energy to subtract, in joules.
      * @return The new voltage value, in volts.
      */
+    /*
     public void dockEnergy (double amount) {
-        /*
-        double initialEnergy = 0.5 * capacitance * voltage * voltage;
-        double newEnergy = initialEnergy - amount;
-        double newVoltage = Math.sqrt(2.0 * newEnergy / capacitance);
-        setVoltage(newVoltage);
-        */
-        // or, more verbosely (and quickly):
         setVoltage(Math.sqrt(2.0 * ((0.5 * capacitance * voltage * voltage) - amount) / capacitance));
     }
+    */
 
     protected void setVoltage (double V) {
             ++numSetVoltages;
@@ -213,7 +215,7 @@ public class Capacitor extends IOUnit {
      */
     public int read (int address, boolean word, long cycles) {
 //        System.err.println("Trapped read to voltage check");
-        if ((address != voltageReaderAddress) || !word) {
+        if ((address != getVoltageAddress) || !word) {
             return 0;
         }
 
@@ -222,7 +224,7 @@ public class Capacitor extends IOUnit {
 
         setPowerMode(POWERMODE_ADC);
         cpu.cycles += ADC_CYCLES;
-        updateVoltage(true /* assume we're in the checkpoint routine */);
+        updateVoltage();
         setPowerMode(POWERMODE_ACTIVE);
         return scaled_amt;
     }
@@ -259,23 +261,6 @@ public class Capacitor extends IOUnit {
         return Capacitor.getResistance(this.powerMode, this.voltage);
     }
 
-    /* Sets the power mode (e.g., active, LPM0, ...).  The constants are defined
-     * in se.sics.mspsim.core.MSP430Constants.MODE_NAMES. */
-    public void setPowerMode (int mode) {
-        System.err.print("Capacitor.setPowerMode ");
-        switch (powerMode) {
-            case POWERMODE_ACTIVE: System.err.println("ACTIVE"); break;
-            case POWERMODE_LPM0: System.err.println("LPM0"); break;
-            case POWERMODE_LPM1: System.err.println("LPM1"); break;
-            case POWERMODE_LPM2: System.err.println("LPM2"); break;
-            case POWERMODE_LPM3: System.err.println("LPM3"); break;
-            case POWERMODE_LPM4: System.err.println("LPM4"); break;
-            case POWERMODE_FLWRI: System.err.println("FLWRI"); break;
-            case POWERMODE_ADC: System.err.println("ADC"); break;
-        }
-        this.powerMode = mode;
-    }
-
     public void toggleHush () {
         suppressVoltagePrinting = !suppressVoltagePrinting;
         suppressEnergyPrinting = !suppressEnergyPrinting;
@@ -285,8 +270,9 @@ public class Capacitor extends IOUnit {
      * P = E/t = VI, so E=tVI.
      * @return true if it's time to die, false otherwise
      */
-    public boolean updateVoltage (boolean inCheckpoint) {
-        if (!enabled) return false;
+    public void updateVoltage () throws StopExecutionException {
+        if (!enabled) return;
+        boolean inCheckpoint = cpu.inCheckpoint;
         double RC = getResistance() * capacitance;
         boolean dead = (clockSource instanceof DeadTimer);
         double currentTime = clockSource.getTimeMillis();
@@ -325,12 +311,7 @@ public class Capacitor extends IOUnit {
         if (dead) {
             if (printCounter++ % 10 == 0)
                 System.err.format("<dead>%1.3f,%1.3f%n", currentTime, getVoltage());
-            return false;
-        }
-
-        if (voltage <= cpu.deathThreshold) {
-            // accumCycleCount += cpu.cycles;
-            shouldDie = true;
+            return;
         }
 
         if (!suppressVoltagePrinting && (printCounter++ % 10 == 0))
@@ -338,7 +319,9 @@ public class Capacitor extends IOUnit {
                     (clockSource.getTimeMillis() + cpu.getOffset()),
                     voltage);
 
-        return shouldDie;
+        if (voltage <= cpu.deathThreshold)
+            throw new StopExecutionException(cpu.readRegister(15),
+                    "Voltage is too low");
     }
 
     public void setClockSource (CapClockSource c) {
@@ -346,8 +329,7 @@ public class Capacitor extends IOUnit {
     }
 
     /**
-     *
-     * @return the energy in Joules
+     * @return the energy stored in this Capacitor, in joules
      */
     public double getEnergy () {
         return (0.5 * capacitance * voltage * voltage);
@@ -355,16 +337,6 @@ public class Capacitor extends IOUnit {
 
     public double getEffectiveMaxVoltage () {
         return effectiveMaxVoltage;
-    }
-
-    public long getNumLifecycles () {
-        return numLifecycles;
-    }
-
-    /* @param cyclesToAdd add this many cycles to the accumulated count too */
-    public void incrementNumLifecycles (long cyclesToAdd) {
-        accumCycleCount += cyclesToAdd;
-        ++numLifecycles;
     }
 
     public String getName () {

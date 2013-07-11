@@ -148,11 +148,11 @@ public class MSP430Core extends Chip implements MSP430Constants,
   public boolean inCheckpoint = false; // XXX note gross SimpleProfiler hacks
   private int previousPC = 0;
 
+  private long totalCycles;
   private int totalMementosCycles = 0;
   private int totalWastedCycles = 0;
 
   public boolean pauseOnDie = false;
-  public DeadTimer deadSource;
   private double offset = 0.0;
 
   // oracular checkpointing
@@ -179,7 +179,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
     MAX_MEM = config.maxMem;
     MSP430XArch = config.MSP430XArch;
 
-    deadSource = new DeadTimer(0.0);
+    deadTimer = new DeadTimer(0.0);
 
     memory = new int[MAX_MEM];
     memorySegments = new Memory[MAX_MEM >> 8];
@@ -778,7 +778,7 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	  boolean retryLifecycle = false;
 	  final long wasted = getWastedCycles();
       System.err.println("cpu.die() at PC=" + Utils.hex16(getPC()) +
-              ", V=" + capacitor.getVoltage() + ", cycles=" + totalCyclesAtDeath +
+              ", V=" + powerSupply.getVoltage() + ", cycles=" + totalCyclesAtDeath +
               ", wasted=" + wasted);
       GenericNode gn = (GenericNode)registry.getComponent("node");
       try {
@@ -805,24 +805,14 @@ public class MSP430Core extends Chip implements MSP430Constants,
         profiler.resetProfile();
       }
 
-      if (capacitor.eFairy != null) {
-          deadSource.setCurrentTime(getTimeMillis() + offset);
-          capacitor.setClockSource(deadSource);
-          int oldMode = capacitor.getPowerMode();
-          capacitor.setPowerMode(MODE_LPM4);
-          while(capacitor.getVoltage() < this.resurrectionThreshold) {
-              capacitor.updateVoltage(false);
-          }
-          capacitor.setPowerMode(oldMode);
-          offset = deadSource.getTimeMillis();
-          capacitor.setClockSource(this);
+      if (powerSupply.traceDriven) {
+          powerSupply.convalesce();
       } else {
-          capacitor.reset();
+          powerSupply.reset();
       }
       lastCyclesTime = nextEventCycles = cpuCycles = cycles = 0;
       noMoreCheckpointsThisLifecycle = false;
       reset(); // NOTE: doesn't do anything until next start or step
-      capacitor.setA(capacitor.getVoltage(), false); //Make sure that A is updated appropriately
 
       if (retryLifecycle) {
     	  isRetry = true;
@@ -831,7 +821,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
     	  System.err.println("totalMementosCycles = " + totalMementosCycles +
     			  " + " + mementosCycles);
     	  totalWastedCycles += wasted;
-    	  capacitor.incrementNumLifecycles(totalCyclesAtDeath);
+          powerSupply.incrementNumLifecycles();
+          totalCycles += totalCyclesAtDeath;
     	  isRetry = false;
       }
   }
@@ -1065,8 +1056,8 @@ public class MSP430Core extends Chip implements MSP430Constants,
     // -------------------------------------------------------------------
     if (interruptsEnabled && servicedInterrupt == -1 && interruptMax >= 0) {
 		  System.err.println("Servicing interrupt: " + interruptMax);
-		  if (capacitor != null) {
-			  System.err.println("Capacitor voltage: " + capacitor.getVoltage());
+		  if (powerSupply != null) {
+			  System.err.println("Power supply voltage: " + powerSupply.getVoltage());
 		  }
       pc = serviceInterrupt(pc);
     }
@@ -2219,13 +2210,24 @@ public class MSP430Core extends Chip implements MSP430Constants,
     
     cpuCycles += cycles - startCycles;
 
-    if (capacitor.updateVoltage(inCheckpoint)) { // time to die
+    try {
+        // update voltage; throw a StopExecutionException if time to die
+        powerSupply.updateVoltage();
+      if (Math.abs(powerSupply.getVoltage() - oracleThreshold) < oracleEpsilon) {
+        fakeCheckpoint();
+      }
+    } catch (StopExecutionException see) {
+        die();
+    }
+    /*
+    if (powerSupply.updateVoltage(inCheckpoint)) { // time to die
       die();
     } else if (!noMoreCheckpointsThisLifecycle) {
-      if (Math.abs(capacitor.getVoltage() - oracleThreshold) < oracleEpsilon) {
+      if (Math.abs(powerSupply.getVoltage() - oracleThreshold) < oracleEpsilon) {
         fakeCheckpoint();
       }
     }
+    */
 
     previousPC = pcBefore;
     
@@ -2339,21 +2341,21 @@ public class MSP430Core extends Chip implements MSP430Constants,
   }
 
   public void stopExecution (String reason) throws StopExecutionException {
-      long totalCycles = capacitor.accumCycleCount + cycles;
+      long ltotalCycles = this.totalCycles + cycles;
       long memCycles = totalMementosCycles + // previous lifecycles
           profiler.getMementosCycles();        // this lifecycle
       throw new StopExecutionException(readRegister(15),
               reason + " after " +
-              totalCycles + " cycles " +
-              "in " + capacitor.getNumLifecycles() + " lifecycles; " +
+              ltotalCycles + " cycles " +
+              "in " + powerSupply.getNumLifecycles() + " lifecycles; " +
               "R15=" + Utils.hex16(readRegister(15)) +
               "; PC=" + Utils.hex16(readRegister(PC)) +
               "; prev PC=" + Utils.hex16(previousPC) +
               "; SP=" + Utils.hex16(readRegister(SP)) +
               "; wasted=" + totalWastedCycles +
-              " (" + (100.0 * totalWastedCycles / totalCycles) + "%)" +
+              " (" + (100.0 * totalWastedCycles / ltotalCycles) + "%)" +
               "; mementosCycles()=" + memCycles +
-              " (" + (100.0 * memCycles / totalCycles) + "%)"
+              " (" + (100.0 * memCycles / ltotalCycles) + "%)"
               );
   }
 }

@@ -44,6 +44,7 @@ import se.sics.mspsim.util.MapTable;
 import se.sics.mspsim.util.SimpleProfiler;
 
 import edu.umass.energy.Capacitor;
+import edu.umass.energy.PowerSupply;
 
 public class MSP430 extends MSP430Core {
 
@@ -77,16 +78,16 @@ public class MSP430 extends MSP430Core {
     super(type, registry, config);
     disAsm = new DisAsm();
 
-    capacitor = new Capacitor(this,
+    powerSupply = new Capacitor(this,
             10e-6 /* capacitance, farads */,
             4.5 /* initial voltage, volts */,
             3.0 /* voltage divider factor */, // XXX WISPism
             2.5 /* voltage check reference voltage */); // XXX WISPism
 
     // make the capacitor responsible for reads to voltageReaderAddress
-    setIORange(Capacitor.voltageReaderAddress, 2, capacitor);
+    setIORange(PowerSupply.getVoltageAddress, 2, powerSupply);
 
-    System.err.println("Set voltage reader to " + capacitor);
+    System.err.println("Set voltage reader to " + powerSupply);
     addRegisterWriteMonitor(SP, new RegisterMonitor.Adapter() {
               public void notifyWriteBefore(int type, int addr, int data) {
                 int stacksize = map.stackStartAddress - readRegister(SP);

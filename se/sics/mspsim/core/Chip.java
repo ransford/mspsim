@@ -39,7 +39,8 @@ import java.io.PrintStream;
 
 import se.sics.mspsim.core.EmulationLogger.WarningType;
 import se.sics.mspsim.util.ArrayUtils;
-import edu.umass.energy.Capacitor;
+import edu.umass.energy.PowerSupply;
+import edu.umass.energy.DeadTimer;
 
 /**
  * @author Joakim Eriksson, SICS
@@ -66,7 +67,9 @@ public abstract class Chip implements Loggable, EventSource {
   protected EmulationLogger logger;
   private PrintStream log;
   protected boolean DEBUG = false;
-  protected Capacitor capacitor = null;
+
+  protected PowerSupply powerSupply = null;
+  protected DeadTimer deadTimer = null;
   public double deathThreshold;
   public double resurrectionThreshold;
   protected int logLevel;
@@ -128,8 +131,8 @@ public abstract class Chip implements Loggable, EventSource {
           listeners[i].modeChanged(this, mode);
         }
       }
-      if (null != capacitor) {
-        capacitor.setPowerMode(this.mode);
+      if (null != powerSupply) {
+        powerSupply.setPowerMode(this.mode);
       }
     }
   }
@@ -179,12 +182,16 @@ public abstract class Chip implements Loggable, EventSource {
     return -1;
   }
 
-  public void setCapacitor (Capacitor cap) {
-      this.capacitor = cap;
+  public void setPowerSupply (PowerSupply ps) {
+      this.powerSupply = ps;
   }
 
-  public Capacitor getCapacitor () {
-      return this.capacitor;
+  public PowerSupply getPowerSupply () {
+      return this.powerSupply;
+  }
+  
+  public DeadTimer getDeadTimer () {
+      return this.deadTimer;
   }
 
   /* Called by subclasses to inform about changes of state */
