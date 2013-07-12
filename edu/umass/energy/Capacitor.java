@@ -23,7 +23,7 @@ public class Capacitor extends PowerSupply {
     private long printCounter = 0;
     private boolean suppressVoltagePrinting = false;
     private boolean suppressEnergyPrinting = false;
-    public EnergyFairy eFairy;
+    public EnergyTrace energyTrace;
 
     private boolean enabled = true;
 
@@ -43,7 +43,7 @@ public class Capacitor extends PowerSupply {
      */
 
     // private double defaultResistance = MSP430_RESISTANCE_ACTIVE;
-    private double eFairyPrevVoltage = 0.0;
+    private double eTracePrevV = 0.0;
 
     public static double resistanceADCRead (double voltage) {
         // Linear regression calculated from spreadsheet; R^2 = 0.9824
@@ -109,9 +109,9 @@ public class Capacitor extends PowerSupply {
         setInitialVoltage(initVoltage);
     }
 
-    public void setEnergyFairy (EnergyFairy ef) {
-        this.eFairy = ef;
-        this.traceDriven = (ef != null);
+    public void setEnergyTrace (EnergyTrace enTrace) {
+        this.energyTrace = enTrace;
+        this.traceDriven = (enTrace != null);
     }
 
     public void setInitialVoltage (double initVoltage) {
@@ -278,10 +278,10 @@ public class Capacitor extends PowerSupply {
         boolean shouldSetVoltage = true;
         boolean shouldDie = false;
 
-        // Give the fairy a crack at the voltage first.
-        if(eFairy != null) {
-            double V_applied = eFairy.getVoltage(currentTime);
-            if (V_applied > eFairyPrevVoltage) { // eFairy wants to add energy
+        // Give the energy trace provider a crack at the voltage first.
+        if(energyTrace != null) {
+            double V_applied = energyTrace.getVoltage(currentTime);
+            if (V_applied > eTracePrevV) { // trace wants to add energy
                 double V_initial = voltage; // V = Q/C
                 double V_final = V_initial +
                     V_applied * (1 - Math.exp((-dt) / 800.0*RC));
@@ -292,7 +292,7 @@ public class Capacitor extends PowerSupply {
                 System.err.println("Added: " + deltaV + "V");
                 shouldSetVoltage = false;
             }
-            eFairyPrevVoltage = V_applied;
+            eTracePrevV = V_applied;
         }
         if (shouldSetVoltage)
             setVoltage(

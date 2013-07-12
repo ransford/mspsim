@@ -48,7 +48,7 @@ import javax.swing.JFrame;
 import java.util.Vector;
 
 import edu.umass.energy.PowerSupply;
-import edu.umass.energy.EnergyFairy;
+import edu.umass.energy.EnergyTrace;
 import edu.umass.energy.Capacitor;
 
 import se.sics.jipv6.util.Utils;
@@ -304,7 +304,7 @@ public abstract class GenericNode extends Chip implements Runnable {
       String voltageTraceFile = config.getProperty("voltagetrace");
       if (null != voltageTraceFile) {
           Capacitor c = (Capacitor)cpu.getPowerSupply();
-          c.setEnergyFairy(new EnergyFairy(voltageTraceFile));
+          c.setEnergyTrace(new EnergyTrace(voltageTraceFile));
           c.setInitialVoltage(0.0);
       }
 

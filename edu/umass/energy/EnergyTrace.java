@@ -8,7 +8,7 @@ import java.util.Scanner;
 
 import se.sics.mspsim.util.Tuple;
 
-public class EnergyFairy {
+public class EnergyTrace {
 
     private ArrayList<Tuple> traceValues;
     private ListIterator<Tuple> iter;
@@ -17,7 +17,7 @@ public class EnergyFairy {
     private double maxTime;
     private double prevTime;
 
-    public EnergyFairy(String tracePath) {
+    public EnergyTrace(String tracePath) {
         this.traceValues = new ArrayList<Tuple>();
         String [] tupleValues = new String[2];
 
