@@ -48,7 +48,7 @@
 package se.sics.mspsim.core;
 
 import java.util.Arrays;
-import edu.umass.energy.Capacitor;
+import edu.umass.energy.PowerSupply;
 
 public class ADC12 extends IOUnit {
 
@@ -89,6 +89,8 @@ public class ADC12 extends IOUnit {
   public static final int ADC12MCTL13 = 0x08D; //Reset with POR
   public static final int ADC12MCTL14 = 0x08E; //Reset with POR
   public static final int ADC12MCTL15 = 0x08F; //Reset with POR
+  
+  public static final int ADC12_CYCLES = 647; // # cycles for ADC read
   
   public static final int[] SHTBITS = new int[] {
     4, 8, 16, 32, 64, 96, 128, 192,
@@ -135,7 +137,7 @@ public class ADC12 extends IOUnit {
     public void execute(long t) {
 //      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + cpu.cycles);
       convert();
-      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getPowerSupply().setPowerMode(PowerSupply.POWERMODE_ACTIVE);
     }
   };
 
@@ -297,7 +299,7 @@ public class ADC12 extends IOUnit {
       int delay = adcDiv * ((adc12Pos < 8 ? shTime0 : shTime1) + 13);
       cpu.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);
     }
-    int delay = adcDiv * (shTime0 + 13) + 647/*XXX*/;
+    int delay = adcDiv * (shTime0 + 13) + ADC12_CYCLES;
     System.err.println("cycles="+cpu.cycles);
 
     cpu.scheduleTimeEvent(adcTrigger, adcTrigger.time + delay);

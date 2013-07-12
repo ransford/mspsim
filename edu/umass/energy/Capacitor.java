@@ -1,5 +1,6 @@
 package edu.umass.energy;
 import java.lang.Math;
+import se.sics.mspsim.core.ADC12;
 import se.sics.mspsim.core.MSP430;
 import se.sics.mspsim.core.IOUnit;
 import se.sics.mspsim.core.MSP430Constants;
@@ -25,8 +26,6 @@ public class Capacitor extends PowerSupply {
     public EnergyFairy eFairy;
 
     private boolean enabled = true;
-    
-    public static final int ADC_CYCLES = 647;
 
     /* Spreadsheety-looking comments in this block refer to the Google
      * spreadsheet at
@@ -220,7 +219,7 @@ public class Capacitor extends PowerSupply {
         int scaled_amt = (int)(Math.round(vfrac * 65536));
 
         setPowerMode(POWERMODE_ADC);
-        cpu.cycles += ADC_CYCLES;
+        cpu.cycles += ADC12.ADC12_CYCLES;
         updateVoltage();
         setPowerMode(POWERMODE_ACTIVE);
         return scaled_amt;

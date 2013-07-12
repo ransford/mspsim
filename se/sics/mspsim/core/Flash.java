@@ -40,7 +40,7 @@ import java.util.Arrays;
 import se.sics.mspsim.core.EmulationLogger.WarningType;
 import se.sics.mspsim.core.Memory.AccessMode;
 import se.sics.mspsim.util.Utils;
-import edu.umass.energy.Capacitor;
+import edu.umass.energy.PowerSupply;
 
 public class Flash extends IOUnit {
   
@@ -121,7 +121,7 @@ public class Flash extends IOUnit {
       System.err.println("Unblocking CPU at cycle " + cpu.cycles);
       blocked_cpu = false;
       cpu.getPowerSupply().updateVoltage();
-      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getPowerSupply().setPowerMode(PowerSupply.POWERMODE_ACTIVE);
       
       switch(currentWriteMode) {
       case NONE:
@@ -238,7 +238,7 @@ public class Flash extends IOUnit {
       if (DEBUG)
 	log("Using MCLK source with div=" + freqdiv);
       cpu.scheduleCycleEvent(end_process, cpu.cycles + (long)time * freqdiv);
-      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_FLWRI);
+      cpu.getPowerSupply().setPowerMode(PowerSupply.POWERMODE_FLWRI);
       break;
     }
   }

@@ -1,11 +1,10 @@
 package se.sics.mspsim.util;
 import se.sics.mspsim.platform.GenericNode;
+import se.sics.mspsim.core.ADC12;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.io.IOException;
-
-import edu.umass.energy.Capacitor;
 
 public class CheckpointValidator
 {
@@ -135,7 +134,7 @@ public boolean postCall(int[] regs, int[] memory, int stackStartAddr, long cycle
 	inChk = false;
 
     // heuristic: did checkpoint do anything expensive?
-    if (cycles - cyclesAtEntry < (Capacitor.ADC_CYCLES + 100/*fudge*/)) {
+    if (cycles - cyclesAtEntry < (ADC12.ADC12_CYCLES + 100/*fudge*/)) {
         return true; // ok by default
     }
     cyclesAtEntry = 0;

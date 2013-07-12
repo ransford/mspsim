@@ -47,8 +47,8 @@ import javax.swing.JFrame;
 
 import java.util.Vector;
 
-import edu.umass.energy.EnergyFairy;
 import edu.umass.energy.PowerSupply;
+import edu.umass.energy.EnergyFairy;
 import edu.umass.energy.Capacitor;
 
 import se.sics.jipv6.util.Utils;

@@ -792,7 +792,7 @@ public class DebugCommands implements CommandBundle {
 				});
 
         ch.registerCommand("voltage",
-        		new BasicCommand("print the current capacitor voltage", "") {
+        		new BasicCommand("print the current power supply voltage", "") {
 					public int executeCommand(CommandContext context) {
 						context.out.println(cpu.getPowerSupply().getVoltage());
 						return 0;
