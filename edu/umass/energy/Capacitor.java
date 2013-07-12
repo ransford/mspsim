@@ -135,7 +135,7 @@ public class Capacitor extends PowerSupply {
         DeadTimer deadt = cpu.getDeadTimer();
         int oldPowerMode = this.powerMode;
         
-        deadt.setCurrentTime(cpu.getTimeMillis() + offset);
+        deadt.setCurrentTime(cpu.getTimeMillis() + PowerSupply.getVoltageAddress);
         this.setClockSource(deadt);
         setPowerMode(MSP430Constants.MODE_LPM4);
 
@@ -334,9 +334,6 @@ public class Capacitor extends PowerSupply {
 
     public String getName () {
         return "Capacitor";
-    }
-
-    public void interruptServiced (int vector) {
     }
 
     public int getPowerMode() {

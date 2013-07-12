@@ -49,6 +49,7 @@ import java.util.Vector;
 
 import edu.umass.energy.EnergyFairy;
 import edu.umass.energy.PowerSupply;
+import edu.umass.energy.Capacitor;
 
 import se.sics.jipv6.util.Utils;
 import se.sics.mspsim.cli.CommandHandler;
@@ -117,7 +118,6 @@ public abstract class GenericNode extends Chip implements Runnable {
     this.powerSupply = powerSup;
     if (this.powerSupply != null) {
       this.powerSupply.setCpu(cpu);
-      cpu.setIORange(PowerSupply.getVoltageAddress, 2, this.powerSupply);
     }
   }
 
@@ -303,7 +303,7 @@ public abstract class GenericNode extends Chip implements Runnable {
       // cmdline
       String voltageTraceFile = config.getProperty("voltagetrace");
       if (null != voltageTraceFile) {
-          Capacitor c = cpu.getCapacitor();
+          Capacitor c = (Capacitor)cpu.getPowerSupply();
           c.setEnergyFairy(new EnergyFairy(voltageTraceFile));
           c.setInitialVoltage(0.0);
       }

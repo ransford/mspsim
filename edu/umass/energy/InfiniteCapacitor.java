@@ -10,8 +10,8 @@ public class InfiniteCapacitor extends PowerSupply {
     public static final double voltage = 1.8;
 
     public InfiniteCapacitor (MSP430 msp) {
-        super("infinite-capacitor", msp);
-        powerMode = Capacitor.POWERMODE_ACTIVE;
+        super("infinite-capacitor");
+        setPowerMode(Capacitor.POWERMODE_ACTIVE);
         energyUsed = 0.0;
         lastModeChangeTime = 0.0;
     }

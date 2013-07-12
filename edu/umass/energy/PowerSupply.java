@@ -18,10 +18,10 @@ import se.sics.mspsim.core.StopExecutionException;
 public abstract class PowerSupply {
     protected double voltage;
     public boolean traceDriven = false;
-    private long numLifecycles = 1;
-    private PowerSupplyIO psio;
-    private String id;
-    private MSP430 cpu;
+    protected long numLifecycles = 1;
+    protected PowerSupplyIO psio;
+    protected String id;
+    protected MSP430 cpu;
 
     protected int powerMode;
     public static final int POWERMODE_ACTIVE = 0;
@@ -37,7 +37,7 @@ public abstract class PowerSupply {
     // current voltage.
     public static final int getVoltageAddress = 0x01C0;
     
-    private ClockSource clockSource;
+    protected ClockSource clockSource;
 
     /* Sets the power mode (e.g., active, LPM0, ...).  The constants are defined
      * in se.sics.mspsim.core.MSP430Constants.MODE_NAMES. */

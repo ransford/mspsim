@@ -772,6 +772,10 @@ public class MSP430Core extends Chip implements MSP430Constants,
 	  long cdiff = cycles - cv.getCyclesAtEndOfLastFullCheckpoint();
 	  return (cdiff > 0) ? cdiff : 0;
   }
+  
+  public long getTotalCycles () {
+      return this.totalCycles;
+  }
 
   public void die () {
 	  final long totalCyclesAtDeath = cycles;

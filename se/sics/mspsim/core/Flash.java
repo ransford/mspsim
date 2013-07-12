@@ -120,8 +120,8 @@ public class Flash extends IOUnit {
     public void execute(long t) {
       System.err.println("Unblocking CPU at cycle " + cpu.cycles);
       blocked_cpu = false;
-      cpu.getCapacitor().updateVoltage(false);
-      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getPowerSupply().updateVoltage();
+      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_ACTIVE);
       
       switch(currentWriteMode) {
       case NONE:
@@ -238,7 +238,7 @@ public class Flash extends IOUnit {
       if (DEBUG)
 	log("Using MCLK source with div=" + freqdiv);
       cpu.scheduleCycleEvent(end_process, cpu.cycles + (long)time * freqdiv);
-      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_FLWRI);
+      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_FLWRI);
       break;
     }
   }

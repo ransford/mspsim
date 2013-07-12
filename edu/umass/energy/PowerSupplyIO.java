@@ -15,4 +15,8 @@ public class PowerSupplyIO extends IOUnit {
     public PowerSupplyIO(String id, MSP430 msp) {
         super(id, msp, msp.memory, PowerSupply.getVoltageAddress);
     }
+    
+    public void interruptServiced (int vector) {
+        return;
+    }
 }

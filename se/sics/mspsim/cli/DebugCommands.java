@@ -444,8 +444,8 @@ public class DebugCommands implements CommandBundle {
         ch.registerCommand("cycles", new BasicCommand("print cycle counter", "") {
             public int executeCommand(CommandContext context) {
               context.err.println("Cycle counter: " + cpu.cycles + " (total " +
-                  (cpu.getCapacitor().accumCycleCount + cpu.cycles) + " over " +
-                  cpu.getCapacitor().getNumLifecycles() + " lifecycles)");
+                  (cpu.getTotalCycles() + cpu.cycles) + " over " +
+                  cpu.getPowerSupply().getNumLifecycles() + " lifecycles)");
               return 0;
             }
         });
@@ -776,22 +776,6 @@ public class DebugCommands implements CommandBundle {
             }
         });
 
-        ch.registerCommand("nocap",
-                new BasicCommand("simulate tethered power (no cap)","") {
-                  public int executeCommand (final CommandContext context) {
-                    cpu.getCapacitor().disable();
-                    return 0;
-                  }
-                });
-
-        ch.registerCommand("hushcap",
-                new BasicCommand("toggle the capacitor's voltage printing","") {
-                  public int executeCommand (final CommandContext context) {
-                    cpu.getCapacitor().toggleHush();
-                    return 0;
-                  }
-                });
-
         ch.registerCommand("findchkpt",
         		new BasicCommand("find the active checkpoint bundle (if any)",
         				"") {
@@ -810,7 +794,7 @@ public class DebugCommands implements CommandBundle {
         ch.registerCommand("voltage",
         		new BasicCommand("print the current capacitor voltage", "") {
 					public int executeCommand(CommandContext context) {
-						context.out.println(cpu.getCapacitor().getVoltage());
+						context.out.println(cpu.getPowerSupply().getVoltage());
 						return 0;
 					}
 				});

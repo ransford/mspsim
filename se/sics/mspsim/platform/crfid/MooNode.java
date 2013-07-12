@@ -40,6 +40,7 @@
  */
 
 package se.sics.mspsim.platform.crfid;
+import edu.umass.energy.Capacitor;
 import java.io.IOException;
 
 import se.sics.mspsim.core.ADC12;
@@ -57,7 +58,11 @@ public class MooNode extends GenericNode implements ADCInput {
   public static final int MODE_MAX = 0; // ?
 
   public MooNode () {
-      super("Moo", new MSP430f2618Config());
+      super("Moo", new MSP430f2618Config(),
+              new Capacitor(10e-6 /* 10 uF */,
+                  4.5 /* 4.5 V */,
+                  3.0 /* voltage divider factor */,
+                  2.5 /* voltage check ref voltage */));
   }
 
   public boolean getDebug () {
@@ -94,9 +99,9 @@ public class MooNode extends GenericNode implements ADCInput {
 
   public void exitCleanup () {
       System.err.println("exitCleanup() called");
-      System.err.println("Final voltage: " + cpu.getCapacitor().getVoltage());
+      System.err.println("Final voltage: " + cpu.getPowerSupply().getVoltage());
       System.err.println("Number of lifecycles: " +
-              cpu.getCapacitor().getNumLifecycles());
+              cpu.getPowerSupply().getNumLifecycles());
   }
 
   public int nextData() {

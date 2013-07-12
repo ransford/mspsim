@@ -135,7 +135,7 @@ public class ADC12 extends IOUnit {
     public void execute(long t) {
 //      System.out.println(getName() + " **** executing update timers at " + t + " cycles=" + cpu.cycles);
       convert();
-      cpu.getCapacitor().setPowerMode(Capacitor.POWERMODE_ACTIVE);
+      cpu.getPowerSupply().setPowerMode(Capacitor.POWERMODE_ACTIVE);
     }
   };
 

@@ -101,9 +101,9 @@ public class WispNode extends GenericNode implements ADCInput {
 
   public void exitCleanup () {
       System.err.println("exitCleanup() called");
-      System.err.println("Final voltage: " + cpu.getCapacitor().getVoltage());
+      System.err.println("Final voltage: " + cpu.getPowerSupply().getVoltage());
       System.err.println("Number of lifecycles: " +
-              cpu.getCapacitor().getNumLifecycles());
+              cpu.getPowerSupply().getNumLifecycles());
   }
 
   public int nextData() {

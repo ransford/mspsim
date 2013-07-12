@@ -8,15 +8,16 @@ public class CapacitorTest extends Capacitor {
     public CapacitorTest (MSP430 msp, double C, double initVoltage,
             double inputVoltageDividerFactor,
             double inputVoltageReferenceVoltage) {
-        super(msp, C, initVoltage, inputVoltageDividerFactor,
+        super(C, initVoltage, inputVoltageDividerFactor,
                 inputVoltageReferenceVoltage);
+        setCpu(msp);
     }
     public void runTest () {
         double testV;
         for (int x = 0; x <= 32; ++x) {
             testV = 1.8 + x * 0.1;
             setVoltage(testV);
-            int vConverted = read(voltageReaderAddress, true, 0);
+            int vConverted = read(getVoltageAddress, true, 0);
             System.out.println(testV + " " + vConverted);
         }
     }
