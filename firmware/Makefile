@@ -1,15 +1,10 @@
-CC=clang
-CFLAGS=-S -O3 -ccc-host-triple msp430-elf -I../../build/msp430/include
+CC=msp430-gcc
+CFLAGS=-mmcu=msp430f2132
 CFILES=$(wildcard *.c)
+EXECUTABLES=$(CFILES:.c=)
 
-all: $(CFILES:.c=.s)
-
-%.s: %.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-%.exe: %.s
-	msp430-gcc -mmcu=msp430x2132 -o $@ $<
+all: $(EXECUTABLES)
 
 .PHONY: clean
 clean:
-	rm -f *.exe *.s
+	rm -f $(EXECUTABLES)
