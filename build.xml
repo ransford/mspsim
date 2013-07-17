@@ -123,4 +123,13 @@
       </java>
   </target>
 
+  <target name="run_wisp_strawman" depends="jar" description="Run WISP with msp430-strawman testcase and capacitor">
+    <property name="FIRMWAREFILE" value="firmware/msp430-strawman.orig"/>
+      <java fork="true" classpath="${jarfile}" classname="se.sics.mspsim.platform.crfid.WispNode">
+          <arg value="-nogui" />
+          <arg value="-exitwhendone" />
+          <arg value="${FIRMWAREFILE}" />
+      </java>
+  </target>
+
 </project>
