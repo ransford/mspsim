@@ -1,4 +1,4 @@
-#include <msp430x21x1.h>
+#include <msp430.h>
 #include <stdlib.h> /* for rand() */
 
 #define VOLTAGE_CHECK_ 0x01C0
