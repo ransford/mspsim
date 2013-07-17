@@ -15,7 +15,6 @@ public class Capacitor extends PowerSupply {
     private double lastATime = 0; // when was A last set?
     private static final double meaninglessStartTime = -1.0;
     private double startTime = meaninglessStartTime;
-    private MSP430 cpu;
     private double initialVoltage;
     private long numSetVoltages = 0;
     private long numUpdateVoltages = 0;
@@ -105,27 +104,29 @@ public class Capacitor extends PowerSupply {
         capacitance = C;
         effectiveMaxVoltage =
             (inputVoltageDividerFactor * inputVoltageReferenceVoltage);
-        setPowerMode(POWERMODE_ACTIVE);
         setInitialVoltage(initVoltage);
     }
+    
+    public void initialize () {
+        voltage = initialVoltage;
+        setA(voltage, false);
+        numSetVoltages = 0;
+        numUpdateVoltages = 0;
+        startTime = meaninglessStartTime;
+        setPowerMode(POWERMODE_ACTIVE);
+    }
 
+    public void setInitialVoltage (double iv) {
+        this.initialVoltage = iv;
+    }
+    
     public void setEnergyTrace (EnergyTrace enTrace) {
         this.energyTrace = enTrace;
         this.traceDriven = (enTrace != null);
     }
 
-    public void setInitialVoltage (double initVoltage) {
-        this.voltage = initialVoltage = initVoltage;
-        setA(initialVoltage, false);
-    }
-
     public void reset () {
-        setPowerMode(POWERMODE_ACTIVE);
-        startTime = meaninglessStartTime;
-        setVoltage(initialVoltage);
-        setA(voltage, false);
-        numSetVoltages = 0;
-        numUpdateVoltages = 0;
+        initialize();
         System.err.println("Capacitor.reset(): voltage=" + voltage +
                 "; startTime=" + startTime);
     }
@@ -232,8 +233,10 @@ public class Capacitor extends PowerSupply {
     public void setA (double newValue, boolean dead) {
         A = newValue;
         lastATime = clockSource.getTimeMillis();
+        /*
         if (!dead)
             lastATime += cpu.getOffset();
+        */
     }
 
     public static double getResistance (int powmode, double V) {
@@ -268,12 +271,15 @@ public class Capacitor extends PowerSupply {
      */
     public void updateVoltage () throws StopExecutionException {
         if (!enabled) return;
+        System.out.println("this.cpu=" + this.cpu);
         boolean inCheckpoint = cpu.inCheckpoint;
         double RC = getResistance() * capacitance;
         boolean dead = (clockSource instanceof DeadTimer);
         double currentTime = clockSource.getTimeMillis();
+        /*
         if (!dead)
             currentTime += cpu.getOffset();
+        */
         double dt = currentTime - lastATime;
         boolean shouldSetVoltage = true;
         boolean shouldDie = false;
@@ -312,7 +318,7 @@ public class Capacitor extends PowerSupply {
 
         if (!suppressVoltagePrinting && (printCounter++ % 10 == 0))
             System.err.format("%s%1.3f,%1.3f%n", (inCheckpoint ? "<chk>" : ""),
-                    (clockSource.getTimeMillis() + cpu.getOffset()),
+                    (clockSource.getTimeMillis() /*+ cpu.getOffset()*/),
                     voltage);
 
         if (voltage <= cpu.deathThreshold)

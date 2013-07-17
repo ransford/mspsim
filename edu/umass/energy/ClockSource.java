@@ -4,7 +4,7 @@ public interface ClockSource {
 
 	public double getTimeMillis();
 
-	public double getOffset();
+//	public double getOffset();
 
 //	public double setInitialValue(double initial);
 

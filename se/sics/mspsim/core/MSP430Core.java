@@ -760,9 +760,11 @@ public class MSP430Core extends Chip implements MSP430Constants,
       }
   }
   
+  /*
   public double getOffset() {
 	  return offset;
   }
+  */
 
   public long getWastedCycles () {
 	  CheckpointValidator cv =

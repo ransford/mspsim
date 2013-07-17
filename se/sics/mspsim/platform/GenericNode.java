@@ -112,12 +112,14 @@ public abstract class GenericNode extends Chip implements Runnable {
   
   public GenericNode(String id, MSP430Config config, PowerSupply powerSup) {
     super(id, new MSP430(0, new ComponentRegistry(), config));
-    this.cpu = (MSP430)super.cpu;
-    this.registry = cpu.getRegistry();
+    cpu = (MSP430)super.cpu;
+    registry = cpu.getRegistry();
 
-    this.powerSupply = powerSup;
+    powerSupply = powerSup;
     if (this.powerSupply != null) {
-      this.powerSupply.setCpu(cpu);
+        powerSupply.setCpu(cpu);
+        powerSupply.initialize();
+        cpu.setPowerSupply(powerSupply);
     }
   }
 
@@ -289,7 +291,7 @@ public abstract class GenericNode extends Chip implements Runnable {
     registry.registerComponent("statcmd", new StatCommands(cpu, stats));
     registry.registerComponent("wincmd", new WindowCommands());
     registry.registerComponent("profilecmd", new ProfilerCommands());
-    registry.registerComponent("netcmd", new NetCommands());
+    // registry.registerComponent("netcmd", new NetCommands());
     registry.registerComponent("windowManager", new JFrameWindowManager());
 
     // Monitor execution
@@ -306,6 +308,7 @@ public abstract class GenericNode extends Chip implements Runnable {
           Capacitor c = (Capacitor)cpu.getPowerSupply();
           c.setEnergyTrace(new EnergyTrace(voltageTraceFile));
           c.setInitialVoltage(0.0);
+          c.initialize();
       }
 
     cpu.reset();

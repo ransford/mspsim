@@ -77,11 +77,14 @@ public abstract class PowerSupply {
     }
 
     public void setCpu (MSP430 msp) {
-        cpu = msp;
-        setClockSource(cpu);
-        psio = new PowerSupplyIO(this.id, cpu);
+        this.cpu = msp;
+        setClockSource(this.cpu);
+        System.out.println("this.cpu=" + this.cpu);
+        psio = new PowerSupplyIO(this.id, this.cpu);
         cpu.setIORange(PowerSupply.getVoltageAddress, 2, psio);
     }
+    
+    public abstract void initialize();
 
     public abstract void reset();
     

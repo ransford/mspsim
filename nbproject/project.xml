@@ -31,7 +31,7 @@
                     <target>clean</target>
                 </action>
                 <action name="run">
-                    <target>run</target>
+                    <target>run_wisp_strawman</target>
                 </action>
                 <action name="test">
                     <target>test</target>
@@ -39,6 +39,10 @@
                 <action name="rebuild">
                     <target>clean</target>
                     <target>compile</target>
+                </action>
+                <action name="debug">
+                    <script>nbproject/ide-targets.xml</script>
+                    <target>debug-nb</target>
                 </action>
             </ide-actions>
             <view>
@@ -58,6 +62,7 @@
                     <ide-action name="clean"/>
                     <ide-action name="run"/>
                     <ide-action name="test"/>
+                    <ide-action name="debug"/>
                 </context-menu>
             </view>
             <subprojects/>
@@ -65,6 +70,7 @@
         <java-data xmlns="http://www.netbeans.org/ns/freeform-project-java/3">
             <compilation-unit>
                 <package-root>.</package-root>
+                <classpath mode="compile">lib/jipv6.jar</classpath>
                 <source-level>1.6</source-level>
             </compilation-unit>
         </java-data>
