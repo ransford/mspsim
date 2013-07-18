@@ -25,7 +25,7 @@
             </folders>
             <ide-actions>
                 <action name="build">
-                    <target>compile</target>
+                    <target>jar</target>
                 </action>
                 <action name="clean">
                     <target>clean</target>
@@ -38,7 +38,7 @@
                 </action>
                 <action name="rebuild">
                     <target>clean</target>
-                    <target>compile</target>
+                    <target>jar</target>
                 </action>
                 <action name="debug">
                     <script>nbproject/ide-targets.xml</script>
