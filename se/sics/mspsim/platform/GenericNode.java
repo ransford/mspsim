@@ -346,9 +346,6 @@ public abstract class GenericNode extends Chip implements Runnable {
           }
         }
         this.stop();
-      } catch (Exception e) {
-        /* what should we do here */
-        e.printStackTrace();
       }
     }
   }
