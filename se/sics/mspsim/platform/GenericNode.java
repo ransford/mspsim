@@ -323,6 +323,10 @@ public abstract class GenericNode extends Chip implements Runnable {
         cpu.stop();
         System.err.println("Execution terminated (" + see.getMessage()
             + ")");
+        if (powerSupply != null) {
+            powerSupply.setPowerMode(PowerSupply.POWERMODE_NONE);
+            System.err.println("Power supply status: " + powerSupply.getStatus());
+        }
         boolean ewd = config
           .getPropertyAsBoolean("exitwhendone", false);
         if (this.expectedExitCode != -1) { // user specified

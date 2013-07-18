@@ -32,6 +32,7 @@ public abstract class PowerSupply {
     public static final int POWERMODE_LPM4 = 5;
     public static final int POWERMODE_FLWRI = 100;
     public static final int POWERMODE_ADC = 101;
+    public static final int POWERMODE_NONE = 9999;
 
     // Read this (otherwise unused) memory address to get this PowerSupply's
     // current voltage.
@@ -43,7 +44,7 @@ public abstract class PowerSupply {
      * in se.sics.mspsim.core.MSP430Constants.MODE_NAMES. */
     public void setPowerMode(int mode) {
         System.err.print("setPowerMode ");
-        switch (this.powerMode) {
+        switch (mode) {
             case POWERMODE_ACTIVE:
                 System.err.println("ACTIVE");
                 break;
@@ -68,6 +69,11 @@ public abstract class PowerSupply {
             case POWERMODE_ADC:
                 System.err.println("ADC");
                 break;
+            case POWERMODE_NONE:
+                System.err.println("NONE");
+                break;
+            default:
+                System.err.println("(Unknown)");
         }
         this.powerMode = mode;
     }
@@ -106,6 +112,8 @@ public abstract class PowerSupply {
         return numLifecycles;
     }
     
+    public abstract String getStatus ();
+
     /**
      * Update the power supply's voltage if it is meaningful to do so.
      * @throws StopExecutionException if the new voltage state dictates a power

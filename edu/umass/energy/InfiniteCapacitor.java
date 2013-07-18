@@ -7,13 +7,17 @@ import se.sics.mspsim.core.StopExecutionException;
 public class InfiniteCapacitor extends PowerSupply {
     double lastModeChangeTime; // time at which power mode last changed
     double energyUsed; // total energy used so far
-    public static final double voltage = 1.8;
+    private double voltage = 3.0;
 
-    public InfiniteCapacitor (MSP430 msp) {
+    public InfiniteCapacitor (double voltage) {
         super("infinite-capacitor");
-        setPowerMode(Capacitor.POWERMODE_ACTIVE);
+        this.voltage = voltage;
+    }
+
+    public void initialize () {
         energyUsed = 0.0;
         lastModeChangeTime = 0.0;
+        setPowerMode(PowerSupply.POWERMODE_ACTIVE);
     }
 
     public void setPowerMode (int newMode) {
@@ -26,7 +30,7 @@ public class InfiniteCapacitor extends PowerSupply {
         energyUsed += power * (timeInLastMode * 1e3);
 
         lastModeChangeTime = now;
-        powerMode = newMode;
+        super.setPowerMode(newMode);
     }
 
     public double getEnergyUsed () {
@@ -48,6 +52,11 @@ public class InfiniteCapacitor extends PowerSupply {
     
     public double getVoltage () {
         return voltage;
+    }
+
+    public String getStatus () {
+        return "InfiniteCapacitor: " + getVoltage() + " V; energy used=" +
+                getEnergyUsed() + " J";
     }
     
     public void updateVoltage () throws StopExecutionException {

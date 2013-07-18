@@ -332,6 +332,17 @@ public class Capacitor extends PowerSupply {
         return (0.5 * capacitance * voltage * voltage);
     }
 
+    public double getMaxEnergy () {
+        double vMax = initialVoltage;
+        return (0.5 * capacitance * vMax * vMax);
+    }
+
+    public String getStatus () {
+        return getName() + ": " + getVoltage() + " V; " +
+                getEnergy() + " J remaining of " +
+                getMaxEnergy() + " J";
+    }
+
     public double getEffectiveMaxVoltage () {
         return effectiveMaxVoltage;
     }
