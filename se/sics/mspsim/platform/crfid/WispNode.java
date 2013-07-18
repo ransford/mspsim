@@ -91,11 +91,8 @@ public class WispNode extends GenericNode implements ADCInput {
   public static void main (String[] args) throws IOException {
       ArgumentManager config = new ArgumentManager();
       config.handleArguments(args);
-      WispNode node;
 
-      /* XXX figure out whether f2132 or f1611 or what */
-
-      node = new WispNode();
+      WispNode node = new WispNode();
       node.setupArgs(config);
   }
 
