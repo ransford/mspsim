@@ -271,7 +271,6 @@ public class Capacitor extends PowerSupply {
      */
     public void updateVoltage () throws StopExecutionException {
         if (!enabled) return;
-        System.out.println("this.cpu=" + this.cpu);
         boolean inCheckpoint = cpu.inCheckpoint;
         double RC = getResistance() * capacitance;
         boolean dead = (clockSource instanceof DeadTimer);
