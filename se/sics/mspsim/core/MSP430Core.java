@@ -1109,6 +1109,12 @@ public class MSP430Core extends Chip implements MSP430Constants,
 
     int pcBefore = pc;
     instruction = currentSegment.read(pc, AccessMode.WORD, AccessType.EXECUTE);
+    
+    // XXX HACK: catch return from main()
+    if (instruction == 0x4130 && readRegister(SP) == map.stackStartAddress) {
+        stopExecution("Return from main()");
+    }
+    
     if (isStopping) {
         // Signaled to stop the execution before performing the instruction
         return -2;
