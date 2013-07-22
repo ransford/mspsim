@@ -776,6 +776,13 @@ public class DebugCommands implements CommandBundle {
             }
         });
 
+        ch.registerCommand("nopowersupply",
+                new BasicCommand("disable power-supply effects", "") {
+                    public int executeCommand (final CommandContext context) {
+                        cpu.getPowerSupply().disable();
+                        return 0;
+                    }});
+
         ch.registerCommand("findchkpt",
         		new BasicCommand("find the active checkpoint bundle (if any)",
         				"") {

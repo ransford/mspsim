@@ -103,6 +103,11 @@ public abstract class PowerSupply {
      * @return the amount of time it took to recover
      */
     public abstract double recover();
+
+    /**
+     * Stop affecting the platform's operation.
+     */
+    public abstract void disable();
     
     public void incrementNumLifecycles() {
         numLifecycles++;
