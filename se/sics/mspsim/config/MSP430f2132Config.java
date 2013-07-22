@@ -1,6 +1,7 @@
 package se.sics.mspsim.config;
 
 import java.util.ArrayList;
+import se.sics.mspsim.core.ADC10;
 import se.sics.mspsim.core.DMA;
 import se.sics.mspsim.core.IOPort;
 import se.sics.mspsim.core.IOUnit;
@@ -72,8 +73,12 @@ public class MSP430f2132Config extends MSP430Config {
     // ports 3 and 4 cannot generate interrupts
     ioUnits.add(new IOPort(cpu, 3, 0, cpu.memory, 0x18));
     ioUnits.add(new IOPort(cpu, 4, 0, cpu.memory, 0x1c));
-    
-    // XXX ADC10
+
+    ADC10 adc10 = new ADC10(cpu);
+    ioUnits.add(adc10);
+    cpu.setIORange(0x048, 4, adc10);
+    cpu.setIORange(0x1B0, 6, adc10);
+    cpu.setIORange(0x1BC, 2, adc10);
 
     return 3 + 6; // XXX why?
   }
