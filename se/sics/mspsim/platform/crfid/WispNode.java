@@ -43,7 +43,7 @@ package se.sics.mspsim.platform.crfid;
 import java.io.IOException;
 
 import se.sics.mspsim.config.MSP430f2132Config;
-import se.sics.mspsim.core.ADC12;
+import se.sics.mspsim.core.ADC10;
 import se.sics.mspsim.core.ADCInput;
 import se.sics.mspsim.core.IOUnit;
 // import se.sics.mspsim.extutil.jfreechart.DataChart;
@@ -74,9 +74,9 @@ public class WispNode extends GenericNode implements ADCInput {
   }
 
   public void setupNode () {
-      IOUnit adc = cpu.getIOUnit("ADC12");
-      if (adc instanceof ADC12) {
-        ((ADC12) adc).setADCInput(0, this);
+      IOUnit adc = cpu.getIOUnit("ADC10");
+      if (adc instanceof ADC10) {
+        ((ADC10) adc).setADCInput(this);
       }
   }
 
