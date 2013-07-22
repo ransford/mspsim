@@ -71,7 +71,7 @@ public class ADC10 extends IOUnit {
     private int adc10ctl0 = 0;
     private int adc10ctl1 = 0;
     private int adc10Mem = 0;
-    private int shTime = 4;
+    private int shTime = SHTBITS[0];
     private boolean adc10On = false;
     private boolean enableConversion;
     private boolean startConversion;
@@ -176,7 +176,7 @@ public class ADC10 extends IOUnit {
             case ADC10MEM:
                 adc10ifg = false;
                 cpu.flagInterrupt(adc10Vector, this, false); // unflag
-                return adc10Mem;
+                return adc10Mem & 0x03ff; // lower 10 bits
             case ADC10DTC0:
                 return adc10dtc0;
             case ADC10DTC1:
@@ -198,15 +198,8 @@ public class ADC10 extends IOUnit {
         }
         boolean runAgain = enableConversion && conSeq != CONSEQ_SINGLE;
 
-        // XXX ADC10...
         ADCInput input = adcInput;
         adc10Mem = input.nextData();
-        /*
-        // Some noise...
-        ADCInput input = adcInput[adc12mctl[adc12Pos] & 0xf];
-        adc12mem[adc12Pos] = input != null ? input.nextData() : 2048 + 100 - smp & 255;
-        smp += 7;
-        */
         
         adc10ifg = true;
         if (adc10ie) {
