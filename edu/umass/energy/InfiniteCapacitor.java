@@ -49,6 +49,9 @@ public class InfiniteCapacitor extends PowerSupply {
     
     public void reset () {
     }
+
+    public void disable () {
+    }
     
     public double getVoltage () {
         return voltage;
