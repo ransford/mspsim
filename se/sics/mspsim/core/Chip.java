@@ -73,9 +73,6 @@ public abstract class Chip implements Loggable, EventSource {
 
   public Chip(String id, MSP430Core cpu) {
     this(id, id, cpu);
-    if (cpu != null) {
-        logger = cpu.getLogger();
-    }
   }
 
   public Chip(String id, String name, MSP430Core cpu) {
@@ -239,6 +236,7 @@ public abstract class Chip implements Loggable, EventSource {
 
   public void setLogLevel(int l) {
       logLevel = l;
+      DEBUG = logLevel == Loggable.DEBUG;
   }
   
   protected void log(String msg) {

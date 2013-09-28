@@ -32,6 +32,7 @@
  */
 /**
  * @author Klaus Stengel <siklsten@informatik.stud.uni-erlangen.de>
+ * @author Víctor Ariño <victor.arino@tado.com>
  */
 package se.sics.mspsim.core;
 
@@ -48,6 +49,9 @@ public class Flash extends IOUnit {
   private static final int FCTL2 = 0x02;
   private static final int FCTL3 = 0x04;
   private static final int FCTL4 = 0x06;
+  
+  /* Size of the flash controller */
+  public static final int SIZE = 8;
 
   private static final int FRKEY =   0x9600;
   private static final int FWKEY =   0xA500;
@@ -101,6 +105,7 @@ public class Flash extends IOUnit {
   private static final int BLOCKWRITE_END_TIME = 6;
 
   private static final int FN_MASK = 0x3f;
+  private static final int LOCKINFO = 0x80;
 
   private FlashRange main_range;
   private FlashRange info_range;
@@ -115,6 +120,15 @@ public class Flash extends IOUnit {
 
   private WriteMode currentWriteMode;
   private int blockwriteCount;
+  
+  /**
+   * Infomem Configurations
+   */
+  private int infomemcfg = 0;
+  /**
+   * Whether the infomem is locked or not
+   */
+  private boolean lockInfo = true;
   
   private TimeEvent end_process = new TimeEvent(0) {
     public void execute(long t) {
@@ -255,6 +269,12 @@ public class Flash extends IOUnit {
         log("Write to flash blocked because of LOCK flag.");
       }
       return;
+    }
+    
+    if (lockInfo && info_range.isInRange(address)) {
+      if (DEBUG) {
+        log("Write to infomem blocked because of LOCKINFO flag.");
+      }
     }
     
     if (cpu.isFlashBusy || wait == false) {
@@ -405,6 +425,9 @@ public class Flash extends IOUnit {
       
       return retval;
     }
+    if (address == FCTL4) {
+      return infomemcfg | FRKEY;
+    }
 
     return 0;
   }
@@ -502,7 +525,8 @@ public class Flash extends IOUnit {
       return;
     }
 
-    if (!(address == FCTL1 || address == FCTL2 || address == FCTL3)) {
+    if (!(address == FCTL1 || address == FCTL2 || address == FCTL3 
+   		 || address == FCTL4)) {
       return;
     }
 
@@ -579,6 +603,10 @@ public class Flash extends IOUnit {
 	statusreg ^= ACCVIFG;
       }
 
+      break;
+    case FCTL4:
+      lockInfo = (regdata & LOCKINFO) > 0;
+      infomemcfg = regdata;
       break;
     }
   }

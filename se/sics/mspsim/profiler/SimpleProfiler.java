@@ -31,15 +31,13 @@
  *
  * -----------------------------------------------------------------
  *
- * MSP430
+ * SimpleProfiler
  *
  * Author  : Joakim Eriksson
- * Created : Sun Oct 21 22:00:00 2007
- * Updated : $Date$
- *           $Revision$
+ * Created : March 5, 2013
  */
 
-package se.sics.mspsim.util;
+package se.sics.mspsim.profiler;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,7 +55,13 @@ import se.sics.mspsim.core.EventSource;
 import se.sics.mspsim.core.MSP430Core;
 import se.sics.mspsim.core.Profiler;
 import se.sics.mspsim.core.StopExecutionException;
-import se.sics.mspsim.profiler.CallListener;
+// import se.sics.mspsim.profiler.CallListener;
+import se.sics.mspsim.profiler.CallEntry;
+import se.sics.mspsim.profiler.CallEntry.CallCounter;
+import se.sics.mspsim.util.ArrayUtils;
+import se.sics.mspsim.util.MapEntry;
+import se.sics.mspsim.util.StackMonitor;
+import se.sics.mspsim.util.Utils;
 
 public class SimpleProfiler implements Profiler, EventListener {
  
@@ -171,7 +175,7 @@ public class SimpleProfiler implements Profiler, EventListener {
     CallListener[] listeners = callListeners;
     if (listeners != null) {
       for (int i = 0, n = listeners.length; i < n; i++) {
-        listeners[i].functionCall(this, entry);
+        listeners[i].functionCall(this, ce);
       }
     }
   }
@@ -259,7 +263,7 @@ public class SimpleProfiler implements Profiler, EventListener {
       CallListener[] listeners = callListeners;
       if (listeners != null) {
         for (int i = 0, n = listeners.length; i < n; i++) {
-          listeners[i].functionReturn(this, fkn);
+          listeners[i].functionReturn(this, cspEntry);
         }
       }
     }
@@ -457,14 +461,14 @@ public class SimpleProfiler implements Profiler, EventListener {
   public void printStackTrace(PrintStream out) {
     int stackCount = cSP;
     out.println("Stack Trace: number of calls: " + stackCount
-        + " PC: $" + Utils.hex(cpu.getPC(), 4));
+        + " PC: $" + Utils.hex(cpu.getPC(), 5));
     for (int i = 0; i < stackCount; i++) {
       CallEntry call = callStack[stackCount - i - 1];
       out.println("  " + call.function.getInfo()
-          + " called from PC: $" + Utils.hex(call.fromPC, 4)
+          + " called from PC: $" + Utils.hex(call.fromPC, 5)
           + " (elapsed: " + (cpu.cpuCycles - call.cycles) + ')');
       if (stackCount - i - 1 == interruptLevel && servicedInterrupt != -1) {
-        out.println(" *** Interrupt " + servicedInterrupt + " from PC: $" + Utils.hex(interruptFrom, 4));
+        out.println(" *** Interrupt " + servicedInterrupt + " from PC: $" + Utils.hex(interruptFrom, 5));
       }
     }
   }
@@ -510,30 +514,6 @@ public class SimpleProfiler implements Profiler, EventListener {
     }
   }
   
-  public static class CallEntry {
-    int fromPC;
-    MapEntry function;
-    long cycles;
-    long exclusiveCycles;
-    int calls;
-    int hide;
-    int stackStart;
-    int currentStackMax;
-    
-    HashMap<MapEntry,CallCounter> callers;
-    
-    public CallEntry() {
-      callers = new HashMap<MapEntry,CallCounter>();
-    }
-  }
-
-  private static class CallCounter implements Comparable<CallCounter> {
-    public int count = 0;
-
-    public int compareTo(CallCounter o) {
-      return (count < o.count ? -1 : (count == o.count ? 0 : 1));
-    }
-  }
 
   private static class TagEntry implements Comparable<TagEntry> {
     public final String tag;
