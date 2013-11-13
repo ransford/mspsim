@@ -56,6 +56,8 @@ import edu.umass.energy.InfiniteCapacitor;
 public class InfiniteWispNode extends GenericNode implements ADCInput {
   public static final boolean DEBUG = false;
   public static final int MODE_MAX = 0; // ?
+  public static final int DEFAULT_SIN_FREQ = 500; // Hz
+  private int sin_freq = DEFAULT_SIN_FREQ;
 
   public InfiniteWispNode () {
       super("WISP", new MSP430f2132Config(),
@@ -100,10 +102,21 @@ public class InfiniteWispNode extends GenericNode implements ADCInput {
               cpu.getPowerSupply().getNumLifecycles());
   }
 
+  public void setupArgs (ArgumentManager config) throws IOException {
+      super.setupArgs(config);
+
+      String sinFreqProperty = config.getProperty("sin_freq");
+      if (sinFreqProperty != null) {
+          this.sin_freq = Integer.parseInt(sinFreqProperty);
+          System.err.println("Set sinusoid frequency to " + this.sin_freq
+                  + " Hz");
+      }
+  }
+
   public int nextData() {
-	  // sinusoid w/ 500 Hz frequency
-	  double time_ms = cpu.getTimeMillis();
-	  double sinval = Math.sin(time_ms * Math.PI);
-	  return (int)(sinval * 127); // sinusoid within range of byte
+      // sinusoid w/ this.sin_freq (in Hz) frequency
+      double time_ms = cpu.getTimeMillis();
+      double sinval = Math.sin(time_ms * sin_freq * 2 * Math.PI);
+      return (int)(sinval * 127); // sinusoid within range of byte
   }
 }

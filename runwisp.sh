@@ -2,8 +2,9 @@
 
 WHEREAMI=$(dirname "$0")
 
-while getopts "hs:t:" opt; do
+while getopts "f:hs:t:" opt; do
 	case $opt in
+		f) EXTRAFLAGS="$EXTRAFLAGS -sin_freq=$OPTARG" ;;
 		s) EXTRAFLAGS="$EXTRAFLAGS -autorun=$OPTARG" ;;
 		t) EXTRAFLAGS="$EXTRAFLAGS -voltagetrace=$OPTARG" ;;
 		h) echo "Usage: $(basename "$0") [options] firmware\n" \
