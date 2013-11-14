@@ -933,7 +933,7 @@ public class DebugCommands implements CommandBundle {
     return '$' + cpu.getAddressAsString(adr);
   }
 
-  private static String getRegisterName(int register) {
+  public static String getRegisterName(int register) {
     if (register >= 0 && register < MSP430Constants.REGISTER_NAMES.length) {
       return MSP430Constants.REGISTER_NAMES[register];
     }

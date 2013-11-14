@@ -51,7 +51,7 @@ import edu.umass.energy.PowerSupply;
 import edu.umass.energy.EnergyTrace;
 import edu.umass.energy.Capacitor;
 
-import se.sics.jipv6.util.Utils;
+// import se.sics.jipv6.util.Utils;
 import se.sics.mspsim.cli.CommandHandler;
 import se.sics.mspsim.cli.DebugCommands;
 import se.sics.mspsim.cli.FileCommands;
@@ -85,6 +85,7 @@ import se.sics.mspsim.util.OperatingModeStatistics;
 import se.sics.mspsim.util.PluginRepository;
 import se.sics.mspsim.util.StatCommands;
 import se.sics.mspsim.util.CheckpointValidator;
+import se.sics.mspsim.util.Utils;
 
 public abstract class GenericNode extends Chip implements Runnable {
 
@@ -326,6 +327,13 @@ public abstract class GenericNode extends Chip implements Runnable {
         if (powerSupply != null) {
             powerSupply.setPowerMode(PowerSupply.POWERMODE_NONE);
             System.err.println("Power supply status: " + powerSupply.getStatus());
+        }
+        for (int i = 0; i < cpu.reg.length; ++i) {
+            System.err.printf(" %4s%3s = %s\n",
+                    (i < MSP430Constants.REGISTER_NAMES.length) ?
+                    DebugCommands.getRegisterName(i) + "/" : "",
+                    "R" + i,
+                    Utils.hex(cpu.getRegister(i), 4));
         }
         boolean ewd = config
           .getPropertyAsBoolean("exitwhendone", false);
