@@ -35,8 +35,6 @@
  * Created : 17 jan 2008
  */
 package se.sics.mspsim.core;
-import java.io.PrintStream;
-
 import se.sics.mspsim.core.EmulationLogger.WarningType;
 import se.sics.mspsim.util.ArrayUtils;
 import edu.umass.energy.Capacitor;
@@ -64,7 +62,6 @@ public abstract class Chip implements Loggable, EventSource {
   private int mode;
   private int chipState;
   protected EmulationLogger logger;
-  private PrintStream log;
   protected boolean DEBUG = false;
   protected Capacitor capacitor = null;
   public double deathThreshold;
