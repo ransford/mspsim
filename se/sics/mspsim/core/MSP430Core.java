@@ -54,7 +54,7 @@ import edu.umass.energy.DeadTimer;
 import se.sics.mspsim.platform.GenericNode;
 import se.sics.mspsim.platform.ShouldRetryLifecycleException;
 import se.sics.mspsim.util.CheckpointValidator;
-import se.sics.mspsim.util.SimpleProfiler;
+import se.sics.mspsim.profiler.SimpleProfiler;
 
 /**
  * The CPU of the MSP430
